@@ -1,0 +1,18 @@
+{
+  "kind": "singleType",
+  "collectionName": "newsletter_configs",
+  "info": {
+    "singularName": "newsletter-config",
+    "pluralName": "newsletter-configs",
+    "displayName": "Newsletter Config"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "headline": { "type": "string" },
+    "accentText": { "type": "string" },
+    "supportingText": { "type": "text" },
+    "placeholder": { "type": "string" },
+    "ctaLabel": { "type": "string" },
+    "active": { "type": "boolean", "default": true }
+  }
+}

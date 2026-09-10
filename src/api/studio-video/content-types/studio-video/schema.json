@@ -1,0 +1,39 @@
+{
+  "kind": "collectionType",
+  "collectionName": "studio_videos",
+  "info": {
+    "singularName": "studio-video",
+    "pluralName": "studio-videos",
+    "displayName": "Studio Video"
+  },
+  "options": { "draftAndPublish": true },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "slug": { "type": "uid", "targetField": "title", "required": true },
+    "description": { "type": "text" },
+    "mediaSource": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::media-source.media-source"
+    },
+    "thumbnail": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"]
+    },
+    "durationSeconds": { "type": "integer" },
+    "releaseDate": { "type": "datetime" },
+    "category": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::category.category"
+    },
+    "featured": { "type": "boolean", "default": false },
+    "visibility": {
+      "type": "enumeration",
+      "enum": ["public", "unlisted", "private"],
+      "default": "public"
+    },
+    "sortOrder": { "type": "integer", "default": 0 }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "kind": "singleType",
+  "collectionName": "homepage_settings",
+  "info": {
+    "singularName": "homepage-settings",
+    "pluralName": "homepage-settings-entries",
+    "displayName": "Homepage Settings"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "latestTitle": { "type": "string", "default": "Latest from Rebel" },
+    "latestEnabled": { "type": "boolean", "default": true },
+    "musicTitle": { "type": "string", "default": "Music" },
+    "musicEnabled": { "type": "boolean", "default": true },
+    "showsTitle": { "type": "string", "default": "Shows" },
+    "showsEnabled": { "type": "boolean", "default": true },
+    "newsTitle": { "type": "string", "default": "News" },
+    "newsEnabled": { "type": "boolean", "default": true },
+    "studioTitle": { "type": "string", "default": "Studio" },
+    "studioEnabled": { "type": "boolean", "default": true },
+    "eventsTitle": { "type": "string", "default": "Events" },
+    "eventsEnabled": { "type": "boolean", "default": true },
+    "newsletterEnabled": { "type": "boolean", "default": true }
+  }
+}

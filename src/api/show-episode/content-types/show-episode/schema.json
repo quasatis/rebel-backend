@@ -1,0 +1,33 @@
+{
+  "kind": "collectionType",
+  "collectionName": "show_episodes",
+  "info": {
+    "singularName": "show-episode",
+    "pluralName": "show-episodes",
+    "displayName": "Show Episode"
+  },
+  "options": { "draftAndPublish": true },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "slug": { "type": "uid", "targetField": "title", "required": true },
+    "description": { "type": "text" },
+    "episodeNumber": { "type": "integer" },
+    "durationSeconds": { "type": "integer" },
+    "thumbnail": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"]
+    },
+    "mediaSource": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::media-source.media-source"
+    },
+    "show": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::show.show",
+      "inversedBy": "episodes"
+    }
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "kind": "collectionType",
+  "collectionName": "synced_videos",
+  "info": {
+    "singularName": "synced-video",
+    "pluralName": "synced-videos",
+    "displayName": "Synced Video"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "youtubeVideoId": { "type": "string", "required": true, "unique": true },
+    "title": { "type": "string", "required": true },
+    "description": { "type": "text" },
+    "thumbnailUrl": { "type": "text" },
+    "publishedAt": { "type": "datetime" },
+    "channelTitle": { "type": "string" },
+    "durationSeconds": { "type": "integer" },
+    "externalUrl": { "type": "string", "required": true },
+    "syncedAt": { "type": "datetime" },
+    "mediaSource": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::media-source.media-source"
+    },
+    "youtubeSource": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::youtube-source.youtube-source",
+      "inversedBy": "syncedVideos"
+    }
+  }
+}

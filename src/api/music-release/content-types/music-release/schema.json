@@ -1,0 +1,45 @@
+{
+  "kind": "collectionType",
+  "collectionName": "music_releases",
+  "info": {
+    "singularName": "music-release",
+    "pluralName": "music-releases",
+    "displayName": "Music Release"
+  },
+  "options": { "draftAndPublish": true },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "slug": { "type": "uid", "targetField": "title", "required": true },
+    "description": { "type": "text" },
+    "coverImage": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"]
+    },
+    "releaseDate": { "type": "date" },
+    "releaseType": {
+      "type": "enumeration",
+      "enum": ["single", "ep", "album"],
+      "default": "single"
+    },
+    "artist": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::artist.artist",
+      "inversedBy": "releases"
+    },
+    "tracks": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::track.track",
+      "mappedBy": "release"
+    },
+    "mediaSource": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::media-source.media-source"
+    },
+    "featured": { "type": "boolean", "default": false },
+    "streamingLinks": { "type": "json" }
+  }
+}

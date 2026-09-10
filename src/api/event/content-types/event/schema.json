@@ -1,0 +1,50 @@
+{
+  "kind": "collectionType",
+  "collectionName": "events",
+  "info": {
+    "singularName": "event",
+    "pluralName": "events",
+    "displayName": "Event"
+  },
+  "options": { "draftAndPublish": true },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "slug": { "type": "uid", "targetField": "title", "required": true },
+    "description": { "type": "text" },
+    "featuredImage": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"]
+    },
+    "startDate": { "type": "datetime", "required": true },
+    "endDate": { "type": "datetime" },
+    "timezone": { "type": "string" },
+    "venue": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::venue.venue"
+    },
+    "city": { "type": "string" },
+    "country": { "type": "string" },
+    "address": { "type": "string" },
+    "latitude": { "type": "decimal" },
+    "longitude": { "type": "decimal" },
+    "ticketUrl": { "type": "string" },
+    "ticketLabel": { "type": "string" },
+    "priceInfo": { "type": "string" },
+    "category": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::event-category.event-category",
+      "inversedBy": "events"
+    },
+    "organizer": { "type": "string" },
+    "featured": { "type": "boolean", "default": false },
+    "status": {
+      "type": "enumeration",
+      "enum": ["draft", "upcoming", "live", "completed", "cancelled"],
+      "default": "draft",
+      "required": true
+    }
+  }
+}

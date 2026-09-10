@@ -1,0 +1,57 @@
+{
+  "kind": "collectionType",
+  "collectionName": "homepage_features",
+  "info": {
+    "singularName": "homepage-feature",
+    "pluralName": "homepage-features",
+    "displayName": "Homepage Feature"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "contentType": {
+      "type": "enumeration",
+      "enum": ["article", "studio-video", "music-release", "event", "show"],
+      "required": true
+    },
+    "headline": { "type": "string" },
+    "description": { "type": "text" },
+    "ctaLabel": { "type": "string" },
+    "ctaUrl": { "type": "string" },
+    "categoryLabel": { "type": "string" },
+    "image": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"]
+    },
+    "position": { "type": "integer", "default": 0 },
+    "priority": { "type": "integer", "default": 0 },
+    "startDate": { "type": "datetime" },
+    "endDate": { "type": "datetime" },
+    "active": { "type": "boolean", "default": true },
+    "article": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::article.article"
+    },
+    "studioVideo": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::studio-video.studio-video"
+    },
+    "musicRelease": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::music-release.music-release"
+    },
+    "event": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::event.event"
+    },
+    "show": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::show.show"
+    }
+  }
+}

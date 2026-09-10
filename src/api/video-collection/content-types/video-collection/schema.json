@@ -1,0 +1,26 @@
+{
+  "kind": "collectionType",
+  "collectionName": "video_collections",
+  "info": {
+    "singularName": "video-collection",
+    "pluralName": "video-collections",
+    "displayName": "Video Collection"
+  },
+  "options": { "draftAndPublish": true },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "slug": { "type": "uid", "targetField": "title", "required": true },
+    "description": { "type": "text" },
+    "coverImage": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"]
+    },
+    "videos": {
+      "type": "relation",
+      "relation": "manyToMany",
+      "target": "api::studio-video.studio-video"
+    },
+    "featured": { "type": "boolean", "default": false }
+  }
+}

@@ -1,0 +1,15 @@
+node_modules
+.tmp
+.cache
+build
+dist
+.strapi
+.git
+.gitignore
+.env
+*.md
+Dockerfile
+docker-compose*.yml
+.DS_Store
+coverage
+exports

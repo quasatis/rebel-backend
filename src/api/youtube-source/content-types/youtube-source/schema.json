@@ -1,0 +1,35 @@
+{
+  "kind": "collectionType",
+  "collectionName": "youtube_sources",
+  "info": {
+    "singularName": "youtube-source",
+    "pluralName": "youtube-sources",
+    "displayName": "YouTube Source"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "displayTitle": { "type": "string", "required": true },
+    "sourceType": {
+      "type": "enumeration",
+      "enum": ["channel", "playlist", "video", "username"],
+      "required": true
+    },
+    "channelId": { "type": "string" },
+    "channelUrl": { "type": "string" },
+    "playlistId": { "type": "string" },
+    "videoId": { "type": "string" },
+    "description": { "type": "text" },
+    "active": { "type": "boolean", "default": true },
+    "syncEnabled": { "type": "boolean", "default": true },
+    "lastSyncedAt": { "type": "datetime" },
+    "syncFrequency": { "type": "string", "default": "hourly" },
+    "videosImported": { "type": "integer", "default": 0 },
+    "lastSyncStatus": { "type": "string" },
+    "syncedVideos": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::synced-video.synced-video",
+      "mappedBy": "youtubeSource"
+    }
+  }
+}

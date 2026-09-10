@@ -1,0 +1,47 @@
+{
+  "kind": "collectionType",
+  "collectionName": "media_sources",
+  "info": {
+    "singularName": "media-source",
+    "pluralName": "media-sources",
+    "displayName": "Media Source",
+    "description": "Normalized external media references (YouTube, Vimeo, Spotify)"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "provider": {
+      "type": "enumeration",
+      "enum": ["youtube", "vimeo", "spotify"],
+      "required": true
+    },
+    "externalId": {
+      "type": "string",
+      "required": true
+    },
+    "externalUrl": {
+      "type": "string",
+      "required": true
+    },
+    "title": {
+      "type": "string"
+    },
+    "thumbnailUrl": {
+      "type": "text"
+    },
+    "durationSeconds": {
+      "type": "integer",
+      "min": 0
+    },
+    "rawMeta": {
+      "type": "json"
+    },
+    "providerExternalKey": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    }
+  }
+}

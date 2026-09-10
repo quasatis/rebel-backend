@@ -1,0 +1,26 @@
+{
+  "kind": "collectionType",
+  "collectionName": "tracks",
+  "info": {
+    "singularName": "track",
+    "pluralName": "tracks",
+    "displayName": "Track"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "title": { "type": "string", "required": true },
+    "trackNumber": { "type": "integer", "min": 1 },
+    "durationSeconds": { "type": "integer", "min": 0 },
+    "release": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::music-release.music-release",
+      "inversedBy": "tracks"
+    },
+    "mediaSource": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::media-source.media-source"
+    }
+  }
+}
