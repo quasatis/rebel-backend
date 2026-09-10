@@ -86,43 +86,129 @@ async function setPublicPermissions(strapi: Core.Strapi) {
   await ensurePermission(strapi, publicRole.id, 'api::search.search.search')
 }
 
+async function setRoleContentPermissions(
+  strapi: Core.Strapi,
+  roleId: number,
+  mode: 'full' | 'read',
+) {
+  const actions =
+    mode === 'full' ? ['find', 'findOne', 'create', 'update', 'delete'] : ['find', 'findOne']
+
+  for (const uid of CONTENT_UIDS) {
+    for (const action of actions) {
+      await ensurePermission(strapi, roleId, `${uid}.${action}`)
+    }
+  }
+
+  await ensurePermission(strapi, roleId, 'api::search.search.search')
+  await ensurePermission(strapi, roleId, 'plugin::upload.content-api.find')
+  await ensurePermission(strapi, roleId, 'plugin::upload.content-api.findOne')
+  await ensurePermission(strapi, roleId, 'plugin::users-permissions.user.me')
+
+  if (mode === 'full') {
+    await ensurePermission(strapi, roleId, 'api::youtube-source.youtube-source.sync')
+    await ensurePermission(strapi, roleId, 'plugin::upload.content-api.upload')
+  }
+}
+
 async function setAuthenticatedPermissions(strapi: Core.Strapi) {
   const authRole = await strapi.db.query('plugin::users-permissions.role').findOne({
     where: { type: 'authenticated' },
   })
   if (!authRole) return
+  await setRoleContentPermissions(strapi, authRole.id, 'full')
+}
 
-  for (const uid of CONTENT_UIDS) {
-    for (const action of ['find', 'findOne', 'create', 'update', 'delete']) {
-      await ensurePermission(strapi, authRole.id, `${uid}.${action}`)
-    }
+async function ensureRole(
+  strapi: Core.Strapi,
+  data: { name: string; type: string; description: string },
+) {
+  const existing = await strapi.db.query('plugin::users-permissions.role').findOne({
+    where: { type: data.type },
+  })
+  if (existing) return existing
+  return strapi.db.query('plugin::users-permissions.role').create({ data })
+}
+
+async function ensureBackofficeUser(
+  strapi: Core.Strapi,
+  data: {
+    username: string
+    email: string
+    password: string
+    roleId: number
+  },
+) {
+  const userService = strapi.plugin('users-permissions').service('user')
+  const existing = await strapi.db.query('plugin::users-permissions.user').findOne({
+    where: { email: data.email },
+  })
+
+  if (!existing) {
+    await userService.add({
+      username: data.username,
+      email: data.email,
+      password: data.password,
+      confirmed: true,
+      blocked: false,
+      role: data.roleId,
+    })
+    strapi.log.info(`Created backoffice user: ${data.email}`)
+    return
   }
-  await ensurePermission(strapi, authRole.id, 'api::youtube-source.youtube-source.sync')
-  await ensurePermission(strapi, authRole.id, 'api::search.search.search')
-  await ensurePermission(strapi, authRole.id, 'plugin::upload.content-api.find')
-  await ensurePermission(strapi, authRole.id, 'plugin::upload.content-api.findOne')
-  await ensurePermission(strapi, authRole.id, 'plugin::upload.content-api.upload')
+
+  await userService.edit(existing.id, {
+    username: data.username,
+    password: data.password,
+    confirmed: true,
+    blocked: false,
+    role: data.roleId,
+  })
+  strapi.log.info(`Updated backoffice user: ${data.email}`)
+}
+
+async function seedBackofficeUsers(strapi: Core.Strapi) {
+  const adminRole = await ensureRole(strapi, {
+    name: 'Admin',
+    type: 'admin',
+    description: 'Full backoffice access',
+  })
+  const editorRole = await ensureRole(strapi, {
+    name: 'Editor',
+    type: 'editor',
+    description: 'Create and edit content',
+  })
+  const viewerRole = await ensureRole(strapi, {
+    name: 'Viewer',
+    type: 'viewer',
+    description: 'Read-only backoffice access',
+  })
+
+  await setRoleContentPermissions(strapi, adminRole.id, 'full')
+  await setRoleContentPermissions(strapi, editorRole.id, 'full')
+  await setRoleContentPermissions(strapi, viewerRole.id, 'read')
+
+  await ensureBackofficeUser(strapi, {
+    username: 'admin',
+    email: 'admin@rebelafrique.com',
+    password: 'RebelAdmin123!',
+    roleId: adminRole.id,
+  })
+  await ensureBackofficeUser(strapi, {
+    username: 'editor',
+    email: 'editor@rebelafrique.com',
+    password: 'RebelEditor123!',
+    roleId: editorRole.id,
+  })
+  await ensureBackofficeUser(strapi, {
+    username: 'viewer',
+    email: 'viewer@rebelafrique.com',
+    password: 'RebelViewer123!',
+    roleId: viewerRole.id,
+  })
 }
 
 async function seedDemoContent(strapi: Core.Strapi) {
-  const authRole = await strapi.db.query('plugin::users-permissions.role').findOne({
-    where: { type: 'authenticated' },
-  })
-
-  const existingUser = await strapi.db.query('plugin::users-permissions.user').findOne({
-    where: { email: 'editor@rebelafrique.com' },
-  })
-  if (!existingUser && authRole) {
-    await strapi.plugin('users-permissions').service('user').add({
-      username: 'editor',
-      email: 'editor@rebelafrique.com',
-      password: 'RebelEditor123!',
-      confirmed: true,
-      blocked: false,
-      role: authRole.id,
-    })
-    strapi.log.info('Created demo editor user: editor@rebelafrique.com')
-  }
 
   async function ensureDocument(
     uid: any,
@@ -533,6 +619,14 @@ export default {
   async bootstrap({ strapi }: { strapi: Core.Strapi }) {
     await setPublicPermissions(strapi)
     await setAuthenticatedPermissions(strapi)
+
+    try {
+      await seedBackofficeUsers(strapi)
+    } catch (error) {
+      strapi.log.error(
+        `Backoffice user seed failed: ${error instanceof Error ? error.message : 'unknown'}`,
+      )
+    }
 
     if (process.env.SEED_DEMO_CONTENT === 'true') {
       try {

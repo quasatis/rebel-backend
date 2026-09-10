@@ -43,9 +43,17 @@ docker compose up --build -d
 
 Create the first Strapi **Admin** user at http://localhost:1338/admin (system admin).
 
-When `SEED_DEMO_CONTENT=true`, bootstrap also creates:
-- Demo editorial content (article, artist, release, show, studio video, event, homepage feature)
-- A users-permissions editor for the custom backoffice (see seed log / `src/index.ts`)
+Bootstrap always creates Users & Permissions roles/users for the custom backoffice (`:3001/login` — not Strapi Admin):
+
+| Role | Email | Password |
+|------|-------|----------|
+| Admin | `admin@rebelafrique.com` | `RebelAdmin123!` |
+| Editor | `editor@rebelafrique.com` | `RebelEditor123!` |
+| Viewer (read-only) | `viewer@rebelafrique.com` | `RebelViewer123!` |
+
+Strapi **Admin** (system) remains at http://localhost:1338/admin and is separate from these accounts.
+
+When `SEED_DEMO_CONTENT=true`, bootstrap also creates demo editorial content (article, artist, release, show, studio video, event, homepage feature).
 
 Backoffice: http://localhost:3001/login
 
@@ -114,7 +122,7 @@ Upsert is idempotent by `youtubeVideoId` and creates/updates linked `media-sourc
 
 On startup, the **public** role gets `find` / `findOne` on published-facing content types (including `media-source` for embed populate), plus `create` for newsletter subscriptions. **Public does not** get `synced-video` or `youtube-source`. Authenticated (demo editor) gets full CRUD + YouTube sync.
 
-Demo editor (when `SEED_DEMO_CONTENT=true`): `editor@rebelafrique.com` / see seed log in `src/index.ts`.
+Backoffice users: see table under Quick start (Admin / Editor / Viewer).
 
 ## Project layout
 
