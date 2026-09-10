@@ -23,5 +23,12 @@
       "target": "api::show-episode.show-episode",
       "mappedBy": "show"
     }
-  }
+  },
+  "indexes": [
+    {
+      "name": "shows_featured_idx",
+      "columns": ["featured"],
+      "type": null
+    }
+  ]
 }

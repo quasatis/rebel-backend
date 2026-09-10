@@ -1,156 +1,303 @@
 /**
  * Cross-content search service for GET /api/search
+ * Response shape matches frontoffice searchService expectations.
  */
 
-type SearchType =
+export type PublicSearchType =
   | 'article'
   | 'artist'
-  | 'event'
   | 'show'
+  | 'episode'
   | 'studio-video'
+  | 'music'
   | 'playlist'
-  | 'music-release'
-  | 'all';
+  | 'event'
 
-const SEARCHABLE: Array<{
-  type: Exclude<SearchType, 'all'>;
-  uid: string;
-  fields: string[];
-  draftAndPublish: boolean;
-}> = [
-  {
-    type: 'article',
-    uid: 'api::article.article',
-    fields: ['title', 'excerpt', 'slug'],
-    draftAndPublish: true,
-  },
-  {
-    type: 'artist',
-    uid: 'api::artist.artist',
-    fields: ['name', 'slug', 'country'],
-    draftAndPublish: true,
-  },
-  {
-    type: 'event',
-    uid: 'api::event.event',
-    fields: ['title', 'slug'],
-    draftAndPublish: true,
-  },
-  {
-    type: 'show',
-    uid: 'api::show.show',
-    fields: ['title', 'slug'],
-    draftAndPublish: true,
-  },
-  {
-    type: 'studio-video',
-    uid: 'api::studio-video.studio-video',
-    fields: ['title', 'slug', 'description'],
-    draftAndPublish: true,
-  },
-  {
-    type: 'playlist',
-    uid: 'api::playlist.playlist',
-    fields: ['title', 'slug', 'description'],
-    draftAndPublish: true,
-  },
-  {
-    type: 'music-release',
-    uid: 'api::music-release.music-release',
-    fields: ['title', 'slug', 'description'],
-    draftAndPublish: true,
-  },
-];
+type SearchHit = {
+  id: number
+  documentId: string
+  type: PublicSearchType
+  title: string
+  slug: string
+  excerpt: string | null
+  imageUrl: string | null
+  category?: string | null
+  publishedAt?: string | null
+}
 
-function buildOrFilters(fields: string[], q: string) {
-  return fields.map((field) => ({
-    [field]: { $containsi: q },
-  }));
+function normalizeType(raw: string): PublicSearchType | '' {
+  const t = raw.trim()
+  if (!t || t === 'all') return ''
+  if (t === 'music-release' || t === 'music') return 'music'
+  return t as PublicSearchType
 }
 
 export default ({ strapi }: { strapi: any }) => ({
   async search({
     q,
-    type = 'all',
+    type = '',
     page = 1,
-    pageSize = 25,
+    pageSize = 20,
   }: {
-    q: string;
-    type?: SearchType | string;
-    page?: number;
-    pageSize?: number;
+    q: string
+    type?: string
+    page?: number
+    pageSize?: number
   }) {
-    const query = (q || '').trim();
+    const query = String(q || '').trim()
+    const safePage = Math.max(1, Number(page) || 1)
+    const safePageSize = Math.min(50, Math.max(1, Number(pageSize) || 20))
+    const filterType = normalizeType(String(type || ''))
+
     if (!query) {
       return {
-        results: [],
-        pagination: { page, pageSize, pageCount: 0, total: 0 },
-      };
+        data: [] as SearchHit[],
+        meta: {
+          pagination: {
+            page: safePage,
+            pageSize: safePageSize,
+            pageCount: 0,
+            total: 0,
+          },
+        },
+      }
     }
 
-    const safePage = Math.max(1, Number(page) || 1);
-    const safePageSize = Math.min(100, Math.max(1, Number(pageSize) || 25));
+    const contains = { $containsi: query }
+    const results: SearchHit[] = []
+    const wants = (name: PublicSearchType) => !filterType || filterType === name
+    const tasks: Promise<void>[] = []
 
-    const targets =
-      type && type !== 'all' ? SEARCHABLE.filter((t) => t.type === type) : SEARCHABLE;
+    if (wants('article')) {
+      tasks.push(
+        strapi
+          .documents('api::article.article')
+          .findMany({
+            filters: { title: contains },
+            status: 'published',
+            limit: safePageSize,
+            populate: ['featuredImage', 'category'],
+          })
+          .then((rows: any[]) => {
+            rows.forEach((row) =>
+              results.push({
+                id: Number(row.id),
+                documentId: String(row.documentId),
+                type: 'article',
+                title: String(row.title),
+                slug: String(row.slug),
+                excerpt: row.excerpt || null,
+                imageUrl: row.featuredImage?.url || null,
+                category: row.category?.name || null,
+                publishedAt: row.publishedAt || null,
+              }),
+            )
+          }),
+      )
+    }
 
-    if (!targets.length) {
-      return {
-        results: [],
+    if (wants('artist')) {
+      tasks.push(
+        strapi
+          .documents('api::artist.artist')
+          .findMany({
+            filters: { name: contains },
+            status: 'published',
+            limit: safePageSize,
+            populate: ['profileImage'],
+          })
+          .then((rows: any[]) => {
+            rows.forEach((row) =>
+              results.push({
+                id: Number(row.id),
+                documentId: String(row.documentId),
+                type: 'artist',
+                title: String(row.name),
+                slug: String(row.slug),
+                excerpt: row.biography || null,
+                imageUrl: row.profileImage?.url || null,
+              }),
+            )
+          }),
+      )
+    }
+
+    if (wants('show')) {
+      tasks.push(
+        strapi
+          .documents('api::show.show')
+          .findMany({
+            filters: { title: contains },
+            status: 'published',
+            limit: safePageSize,
+            populate: ['coverImage'],
+          })
+          .then((rows: any[]) => {
+            rows.forEach((row) =>
+              results.push({
+                id: Number(row.id),
+                documentId: String(row.documentId),
+                type: 'show',
+                title: String(row.title),
+                slug: String(row.slug),
+                excerpt: row.description || null,
+                imageUrl: row.coverImage?.url || null,
+              }),
+            )
+          }),
+      )
+    }
+
+    if (wants('episode')) {
+      tasks.push(
+        strapi
+          .documents('api::show-episode.show-episode')
+          .findMany({
+            filters: { title: contains },
+            status: 'published',
+            limit: safePageSize,
+            populate: ['thumbnail', 'show'],
+          })
+          .then((rows: any[]) => {
+            rows.forEach((row) =>
+              results.push({
+                id: Number(row.id),
+                documentId: String(row.documentId),
+                type: 'episode',
+                title: String(row.title),
+                slug: String(row.show?.slug || row.slug),
+                excerpt: row.description || null,
+                imageUrl: row.thumbnail?.url || null,
+                publishedAt: row.publishedAt || null,
+              }),
+            )
+          }),
+      )
+    }
+
+    if (wants('studio-video')) {
+      tasks.push(
+        strapi
+          .documents('api::studio-video.studio-video')
+          .findMany({
+            filters: { title: contains, visibility: 'public' },
+            status: 'published',
+            limit: safePageSize,
+            populate: ['thumbnail'],
+          })
+          .then((rows: any[]) => {
+            rows.forEach((row) =>
+              results.push({
+                id: Number(row.id),
+                documentId: String(row.documentId),
+                type: 'studio-video',
+                title: String(row.title),
+                slug: String(row.slug),
+                excerpt: row.description || null,
+                imageUrl: row.thumbnail?.url || null,
+                publishedAt: row.releaseDate || null,
+              }),
+            )
+          }),
+      )
+    }
+
+    if (wants('music')) {
+      tasks.push(
+        strapi
+          .documents('api::music-release.music-release')
+          .findMany({
+            filters: { title: contains },
+            status: 'published',
+            limit: safePageSize,
+            populate: ['coverImage'],
+          })
+          .then((rows: any[]) => {
+            rows.forEach((row) =>
+              results.push({
+                id: Number(row.id),
+                documentId: String(row.documentId),
+                type: 'music',
+                title: String(row.title),
+                slug: String(row.slug),
+                excerpt: row.description || null,
+                imageUrl: row.coverImage?.url || null,
+              }),
+            )
+          }),
+      )
+    }
+
+    if (wants('playlist')) {
+      tasks.push(
+        strapi
+          .documents('api::playlist.playlist')
+          .findMany({
+            filters: { title: contains },
+            status: 'published',
+            limit: safePageSize,
+            populate: ['coverImage'],
+          })
+          .then((rows: any[]) => {
+            rows.forEach((row) =>
+              results.push({
+                id: Number(row.id),
+                documentId: String(row.documentId),
+                type: 'playlist',
+                title: String(row.title),
+                slug: String(row.slug),
+                excerpt: row.description || null,
+                imageUrl: row.coverImage?.url || null,
+              }),
+            )
+          }),
+      )
+    }
+
+    if (wants('event')) {
+      tasks.push(
+        strapi
+          .documents('api::event.event')
+          .findMany({
+            filters: { title: contains },
+            status: 'published',
+            limit: safePageSize,
+            populate: ['featuredImage', 'category'],
+          })
+          .then((rows: any[]) => {
+            rows.forEach((row) =>
+              results.push({
+                id: Number(row.id),
+                documentId: String(row.documentId),
+                type: 'event',
+                title: String(row.title),
+                slug: String(row.slug),
+                excerpt: row.description || null,
+                imageUrl: row.featuredImage?.url || null,
+                category: row.category?.name || null,
+                publishedAt: row.startDate || null,
+              }),
+            )
+          }),
+      )
+    }
+
+    await Promise.all(tasks)
+
+    const total = results.length
+    const start = (safePage - 1) * safePageSize
+    const data = results.slice(start, start + safePageSize)
+
+    return {
+      data,
+      meta: {
         pagination: {
           page: safePage,
           pageSize: safePageSize,
-          pageCount: 0,
-          total: 0,
+          pageCount: Math.ceil(total / safePageSize) || 0,
+          total,
         },
-      };
-    }
-
-    const perTypeLimit = safePage * safePageSize;
-
-    const buckets = await Promise.all(
-      targets.map(async (target) => {
-        const filters: Record<string, unknown> = {
-          $or: buildOrFilters(target.fields, query),
-        };
-
-        const docs = await strapi.documents(target.uid).findMany({
-          filters,
-          status: target.draftAndPublish ? 'published' : undefined,
-          limit: perTypeLimit,
-          sort: 'createdAt:desc',
-        });
-
-        return (docs || []).map((doc: any) => ({
-          type: target.type,
-          documentId: doc.documentId,
-          id: doc.id,
-          title: doc.title || doc.name || '',
-          slug: doc.slug || null,
-          excerpt: doc.excerpt || doc.description || null,
-          data: doc,
-        }));
-      })
-    );
-
-    const merged = buckets.flat().sort((a, b) => {
-      const aDate = a.data?.createdAt ? new Date(a.data.createdAt).getTime() : 0;
-      const bDate = b.data?.createdAt ? new Date(b.data.createdAt).getTime() : 0;
-      return bDate - aDate;
-    });
-
-    const total = merged.length;
-    const start = (safePage - 1) * safePageSize;
-    const results = merged.slice(start, start + safePageSize);
-
-    return {
-      results,
-      pagination: {
-        page: safePage,
-        pageSize: safePageSize,
-        pageCount: Math.ceil(total / safePageSize) || 0,
-        total,
       },
-    };
+    }
   },
-});
+})

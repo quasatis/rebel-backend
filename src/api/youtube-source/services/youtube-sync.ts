@@ -19,6 +19,8 @@ export default ({ strapi }) => ({
         items = await youtube.fetchPlaylistVideos(source.playlistId)
       } else if (source.sourceType === 'channel' && source.channelId) {
         items = await youtube.fetchChannelUploads(source.channelId)
+      } else if (source.sourceType === 'username' && source.username) {
+        items = await youtube.fetchUsernameUploads(source.username)
       } else if (source.sourceType === 'video' && source.videoId) {
         const one = await youtube.fetchVideo(source.videoId)
         items = one ? [one] : []

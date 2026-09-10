@@ -30,5 +30,12 @@
       "target": "api::music-release.music-release",
       "mappedBy": "artist"
     }
-  }
+  },
+  "indexes": [
+    {
+      "name": "artists_featured_idx",
+      "columns": ["featured"],
+      "type": null
+    }
+  ]
 }

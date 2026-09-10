@@ -96,7 +96,7 @@ npm run develop
 GET /api/search?q=afrobeats&type=article&page=1&pageSize=25
 ```
 
-`type` optional: `article` | `artist` | `event` | `show` | `studio-video` | `playlist` | `music-release` | `all`
+`type` optional: `article` | `artist` | `event` | `show` | `episode` | `studio-video` | `playlist` | `music` (alias: `music-release`) | omit for all
 
 ### Manual YouTube sync
 
@@ -104,13 +104,17 @@ GET /api/search?q=afrobeats&type=article&page=1&pageSize=25
 POST /api/youtube-sources/:documentId/sync
 ```
 
-Requires an authenticated API token / admin session. Hourly cron also syncs sources with `active` + `syncEnabled`.
+Requires an authenticated API token / JWT (custom backoffice). Hourly cron also syncs sources with `active` + `syncEnabled`.
 
-Upsert is idempotent by `youtubeVideoId` and creates/updates linked `media-source` rows.
+Supported `sourceType` values: `channel`, `playlist`, `video`, `username` (YouTube `@handle` or legacy username via the `username` field).
+
+Upsert is idempotent by `youtubeVideoId` and creates/updates linked `media-source` rows (`rawMeta` stores provider extras; uniqueness via `providerExternalKey`).
 
 ## Bootstrap permissions
 
-On startup, the **public** role gets `find` / `findOne` on public content types, plus `create` for newsletter subscriptions. Users APIs and YouTube source write/sync actions are **not** granted to public.
+On startup, the **public** role gets `find` / `findOne` on published-facing content types (including `media-source` for embed populate), plus `create` for newsletter subscriptions. **Public does not** get `synced-video` or `youtube-source`. Authenticated (demo editor) gets full CRUD + YouTube sync.
+
+Demo editor (when `SEED_DEMO_CONTENT=true`): `editor@rebelafrique.com` / see seed log in `src/index.ts`.
 
 ## Project layout
 

@@ -46,5 +46,17 @@
       "default": "draft",
       "required": true
     }
-  }
+  },
+  "indexes": [
+    {
+      "name": "events_start_date_idx",
+      "columns": ["start_date"],
+      "type": null
+    },
+    {
+      "name": "events_featured_idx",
+      "columns": ["featured"],
+      "type": null
+    }
+  ]
 }

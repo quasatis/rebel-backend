@@ -16,6 +16,7 @@
     },
     "channelId": { "type": "string" },
     "channelUrl": { "type": "string" },
+    "username": { "type": "string" },
     "playlistId": { "type": "string" },
     "videoId": { "type": "string" },
     "description": { "type": "text" },

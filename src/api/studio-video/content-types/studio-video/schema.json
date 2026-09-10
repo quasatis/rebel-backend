@@ -35,5 +35,12 @@
       "default": "public"
     },
     "sortOrder": { "type": "integer", "default": 0 }
-  }
+  },
+  "indexes": [
+    {
+      "name": "studio_videos_featured_idx",
+      "columns": ["featured"],
+      "type": null
+    }
+  ]
 }

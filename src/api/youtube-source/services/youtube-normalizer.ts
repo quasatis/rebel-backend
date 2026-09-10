@@ -16,6 +16,8 @@ export type NormalizedYoutubeVideo = {
     title: string
     thumbnailUrl: string
     durationSeconds?: number
+    providerExternalKey: string
+    rawMeta?: Record<string, unknown>
   }
 }
 
@@ -38,6 +40,11 @@ export default () => ({
         title: item.title,
         thumbnailUrl: item.thumbnailUrl,
         durationSeconds: item.durationSeconds,
+        providerExternalKey: `youtube:${item.id}`,
+        rawMeta: {
+          channelTitle: item.channelTitle,
+          publishedAt: item.publishedAt,
+        },
       },
     }
   },

@@ -1,5 +1,6 @@
 /**
  * YouTube Data API client. Credentials stay server-side only.
+ * Includes light quota batching + exponential backoff on 403/429.
  */
 
 export type YoutubeListItem = {
@@ -20,6 +21,10 @@ function getApiKey(): string {
   return key
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 async function youtubeGet<T>(path: string, params: Record<string, string>): Promise<T> {
   const url = new URL(`https://www.googleapis.com/youtube/v3/${path}`)
   url.searchParams.set('key', getApiKey())
@@ -27,11 +32,29 @@ async function youtubeGet<T>(path: string, params: Record<string, string>): Prom
     if (v) url.searchParams.set(k, v)
   }
 
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`YouTube API error ${response.status}`)
+  const maxAttempts = 4
+  let lastError: Error | null = null
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const response = await fetch(url)
+    if (response.ok) {
+      return (await response.json()) as T
+    }
+
+    const retryable = response.status === 403 || response.status === 429 || response.status >= 500
+    const body = await response.text().catch(() => '')
+    lastError = new Error(`YouTube API error ${response.status}${body ? `: ${body.slice(0, 200)}` : ''}`)
+
+    if (!retryable || attempt === maxAttempts) {
+      throw lastError
+    }
+
+    // Exponential backoff with jitter: ~500ms, 1s, 2s
+    const delay = Math.min(8000, 400 * 2 ** (attempt - 1) + Math.floor(Math.random() * 200))
+    await sleep(delay)
   }
-  return (await response.json()) as T
+
+  throw lastError || new Error('YouTube API request failed')
 }
 
 function parseDuration(iso?: string): number | undefined {
@@ -42,6 +65,34 @@ function parseDuration(iso?: string): number | undefined {
   const m = Number(match[2] || 0)
   const s = Number(match[3] || 0)
   return h * 3600 + m * 60 + s
+}
+
+/** Batch video IDs (max 50 per YouTube videos.list call) and attach durations. */
+async function enrichDurations(items: YoutubeListItem[]): Promise<YoutubeListItem[]> {
+  if (!items.length) return items
+  const byId = new Map(items.map((item) => [item.id, { ...item }]))
+  const ids = [...byId.keys()]
+
+  for (let i = 0; i < ids.length; i += 50) {
+    const chunk = ids.slice(i, i + 50)
+    const data = await youtubeGet<{
+      items?: Array<{ id?: string; contentDetails?: { duration?: string } }>
+    }>('videos', {
+      part: 'contentDetails',
+      id: chunk.join(','),
+    })
+    for (const row of data.items || []) {
+      if (!row.id) continue
+      const existing = byId.get(row.id)
+      if (existing) {
+        existing.durationSeconds = parseDuration(row.contentDetails?.duration)
+      }
+    }
+    // Small pause between batches to reduce quota spikes
+    if (i + 50 < ids.length) await sleep(150)
+  }
+
+  return [...byId.values()]
 }
 
 export default () => ({
@@ -83,8 +134,9 @@ export default () => ({
         })
       }
       pageToken = page.nextPageToken || ''
+      if (pageToken) await sleep(150)
     } while (pageToken)
-    return items
+    return enrichDurations(items)
   },
 
   async fetchChannelUploads(channelId: string): Promise<YoutubeListItem[]> {
@@ -97,6 +149,41 @@ export default () => ({
     const uploads = channel.items?.[0]?.contentDetails?.relatedPlaylists?.uploads
     if (!uploads) return []
     return this.fetchPlaylistVideos(uploads)
+  },
+
+  /**
+   * Resolve a YouTube @handle or legacy username to a channel ID, then fetch uploads.
+   */
+  async fetchUsernameUploads(username: string): Promise<YoutubeListItem[]> {
+    const handle = username.replace(/^@/, '').trim()
+    if (!handle) return []
+
+    // Prefer forHandle (YouTube handles); fall back to forUsername (legacy)
+    let channelId: string | undefined
+
+    const byHandle = await youtubeGet<{
+      items?: Array<{ id?: string }>
+    }>('channels', {
+      part: 'id',
+      forHandle: handle,
+    })
+    channelId = byHandle.items?.[0]?.id
+
+    if (!channelId) {
+      const byUsername = await youtubeGet<{
+        items?: Array<{ id?: string }>
+      }>('channels', {
+        part: 'id',
+        forUsername: handle,
+      })
+      channelId = byUsername.items?.[0]?.id
+    }
+
+    if (!channelId) {
+      throw new Error(`YouTube channel not found for username/handle: ${handle}`)
+    }
+
+    return this.fetchChannelUploads(channelId)
   },
 
   async fetchVideo(videoId: string): Promise<YoutubeListItem | null> {

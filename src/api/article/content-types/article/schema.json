@@ -62,5 +62,17 @@
       "relation": "manyToMany",
       "target": "api::article.article"
     }
-  }
+  },
+  "indexes": [
+    {
+      "name": "articles_featured_idx",
+      "columns": ["featured"],
+      "type": null
+    },
+    {
+      "name": "articles_published_at_idx",
+      "columns": ["published_at"],
+      "type": null
+    }
+  ]
 }

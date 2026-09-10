@@ -37,16 +37,44 @@ async function ensurePermission(strapi: Core.Strapi, roleId: number, action: str
   }
 }
 
+async function revokePermission(strapi: Core.Strapi, roleId: number, action: string) {
+  const existing = await strapi.db.query('plugin::users-permissions.permission').findOne({
+    where: { action, role: roleId },
+  })
+  if (existing) {
+    await strapi.db.query('plugin::users-permissions.permission').delete({
+      where: { id: existing.id },
+    })
+  }
+}
+
 async function setPublicPermissions(strapi: Core.Strapi) {
   const publicRole = await strapi.db.query('plugin::users-permissions.role').findOne({
     where: { type: 'public' },
   })
   if (!publicRole) return
 
+  // Synced YouTube rows and YouTube source configs stay BO-only.
+  // MediaSource stays public so FO can populate embeds on published content.
+  const publicDenied = new Set([
+    'api::newsletter-subscription.newsletter-subscription',
+    'api::youtube-source.youtube-source',
+    'api::synced-video.synced-video',
+  ])
+
   for (const uid of CONTENT_UIDS) {
-    if (uid.includes('newsletter-subscription') || uid.includes('youtube-source')) continue
+    if (publicDenied.has(uid)) continue
     for (const action of ['find', 'findOne']) {
       await ensurePermission(strapi, publicRole.id, `${uid}.${action}`)
+    }
+  }
+
+  for (const uid of [
+    'api::synced-video.synced-video',
+    'api::youtube-source.youtube-source',
+  ]) {
+    for (const action of ['find', 'findOne', 'create', 'update', 'delete']) {
+      await revokePermission(strapi, publicRole.id, `${uid}.${action}`)
     }
   }
 
@@ -138,6 +166,32 @@ async function seedDemoContent(strapi: Core.Strapi) {
     },
   )
 
+  const tag = await ensureDocument(
+    'api::tag.tag',
+    'afrobeats',
+    { slug: 'afrobeats' },
+    {
+      name: 'Afrobeats',
+      slug: 'afrobeats',
+    },
+  )
+
+  const mediaSource = await ensureDocument(
+    'api::media-source.media-source',
+    'youtube:dQw4w9WgXcQ',
+    { providerExternalKey: 'youtube:dQw4w9WgXcQ' },
+    {
+      provider: 'youtube',
+      externalId: 'dQw4w9WgXcQ',
+      externalUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      title: 'Featured Studio Session',
+      thumbnailUrl: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+      durationSeconds: 212,
+      providerExternalKey: 'youtube:dQw4w9WgXcQ',
+      rawMeta: { seed: true },
+    },
+  )
+
   const article = await ensureDocument(
     'api::article.article',
     'the-sound-of-a-new-generation',
@@ -163,6 +217,7 @@ async function seedDemoContent(strapi: Core.Strapi) {
       seoDescription: "Discover the artists shaping Africa's creative future.",
       category: category.documentId,
       author: author.documentId,
+      tags: [tag.documentId],
     },
     { publish: true },
   )
@@ -181,7 +236,7 @@ async function seedDemoContent(strapi: Core.Strapi) {
     { publish: true },
   )
 
-  await ensureDocument(
+  const release = await ensureDocument(
     'api::music-release.music-release',
     'ku-lo-sa',
     { slug: 'ku-lo-sa' },
@@ -197,19 +252,34 @@ async function seedDemoContent(strapi: Core.Strapi) {
     { publish: true },
   )
 
-  const mediaSource = await ensureDocument(
-    'api::media-source.media-source',
-    'youtube:dQw4w9WgXcQ',
-    { providerExternalKey: 'youtube:dQw4w9WgXcQ' },
+  await ensureDocument(
+    'api::track.track',
+    'ku-lo-sa-track-1',
+    { title: 'KU LO SA' },
     {
-      provider: 'youtube',
-      externalId: 'dQw4w9WgXcQ',
-      externalUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-      title: 'Featured Studio Session',
-      thumbnailUrl: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+      title: 'KU LO SA',
+      trackNumber: 1,
       durationSeconds: 212,
-      providerExternalKey: 'youtube:dQw4w9WgXcQ',
+      release: release.documentId,
+      mediaSource: mediaSource.documentId,
     },
+  )
+
+  await ensureDocument(
+    'api::playlist.playlist',
+    'rebel-essentials',
+    { slug: 'rebel-essentials' },
+    {
+      title: 'Rebel Essentials',
+      slug: 'rebel-essentials',
+      description: 'A starter playlist of Rebel-approved cuts.',
+      featured: true,
+      displayOrder: 1,
+      active: true,
+      artist: artist.documentId,
+      mediaSource: mediaSource.documentId,
+    },
+    { publish: true },
   )
 
   const show = await ensureDocument(
@@ -241,7 +311,7 @@ async function seedDemoContent(strapi: Core.Strapi) {
     { publish: true },
   )
 
-  await ensureDocument(
+  const studioVideo = await ensureDocument(
     'api::studio-video.studio-video',
     'studio-cut-night-drive',
     { slug: 'studio-cut-night-drive' },
@@ -257,6 +327,43 @@ async function seedDemoContent(strapi: Core.Strapi) {
       sortOrder: 1,
     },
     { publish: true },
+  )
+
+  await ensureDocument(
+    'api::video-collection.video-collection',
+    'night-drives',
+    { slug: 'night-drives' },
+    {
+      title: 'Night Drives',
+      slug: 'night-drives',
+      description: 'Cinematic studio cuts for late hours.',
+      featured: true,
+      videos: [studioVideo.documentId],
+    },
+    { publish: true },
+  )
+
+  const venue = await ensureDocument(
+    'api::venue.venue',
+    'terra-kulture',
+    { slug: 'terra-kulture' },
+    {
+      name: 'Terra Kulture',
+      slug: 'terra-kulture',
+      address: 'Plot 1376 Tiamiyu Savage Street',
+      city: 'Lagos',
+      country: 'Nigeria',
+    },
+  )
+
+  const eventCategory = await ensureDocument(
+    'api::event-category.event-category',
+    'live-music',
+    { slug: 'live-music' },
+    {
+      name: 'Live Music',
+      slug: 'live-music',
+    },
   )
 
   const start = new Date()
@@ -277,8 +384,27 @@ async function seedDemoContent(strapi: Core.Strapi) {
       featured: true,
       ticketLabel: 'Get tickets',
       ticketUrl: 'https://example.com/tickets',
+      venue: venue.documentId,
+      category: eventCategory.documentId,
     },
     { publish: true },
+  )
+
+  await ensureDocument(
+    'api::youtube-source.youtube-source',
+    'rebel-demo-channel',
+    { displayTitle: 'Rebel Demo Channel' },
+    {
+      displayTitle: 'Rebel Demo Channel',
+      sourceType: 'username',
+      username: 'GoogleDevelopers',
+      description: 'Sample username/handle source for sync smoke tests (inactive by default).',
+      active: false,
+      syncEnabled: false,
+      syncFrequency: 'hourly',
+      videosImported: 0,
+      lastSyncStatus: 'seeded-inactive',
+    },
   )
 
   await ensureDocument(
