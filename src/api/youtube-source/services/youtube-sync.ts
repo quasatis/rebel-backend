@@ -1,4 +1,100 @@
+function slugify(input: string): string {
+  const base = input
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80)
+  return base || 'episode'
+}
+
+async function uniqueEpisodeSlug(strapi: any, base: string, excludeDocumentId?: string) {
+  let candidate = base
+  let i = 2
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const existing = await strapi.documents('api::show-episode.show-episode').findMany({
+      filters: { slug: candidate },
+      limit: 1,
+    })
+    const hit = existing?.[0]
+    if (!hit || (excludeDocumentId && hit.documentId === excludeDocumentId)) {
+      return candidate
+    }
+    candidate = `${base}-${i}`
+    i += 1
+  }
+}
+
 export default ({ strapi }) => ({
+  async upsertShowEpisodes(source: { id: number; documentId: string }, items: Array<{
+    youtubeVideoId: string
+    title: string
+    description: string
+    thumbnailUrl: string
+    publishedAt: string
+    durationSeconds?: number
+    mediaSourceId: number
+  }>) {
+    const shows = await strapi.documents('api::show.show').findMany({
+      filters: { youtubeSource: { id: source.id } },
+      limit: 50,
+    })
+
+    if (!shows?.length) {
+      return { episodesCreated: 0, episodesUpdated: 0 }
+    }
+
+    let episodesCreated = 0
+    let episodesUpdated = 0
+
+    for (const show of shows) {
+      for (const item of items) {
+        const existingEpisodes = await strapi.db.query('api::show-episode.show-episode').findMany({
+          where: {
+            show: show.id,
+            mediaSource: item.mediaSourceId,
+          },
+          limit: 1,
+        })
+        const existing = existingEpisodes?.[0]
+
+        const episodeData = {
+          title: item.title,
+          description: item.description,
+          durationSeconds: item.durationSeconds ?? null,
+          isActive: true,
+          mediaSource: item.mediaSourceId,
+          show: show.id,
+        }
+
+        if (existing) {
+          await strapi.db.query('api::show-episode.show-episode').update({
+            where: { id: existing.id },
+            data: episodeData,
+          })
+          episodesUpdated += 1
+        } else {
+          const slug = await uniqueEpisodeSlug(strapi, slugify(item.title))
+          await strapi.documents('api::show-episode.show-episode').create({
+            data: {
+              ...episodeData,
+              slug,
+              show: show.documentId,
+              mediaSource: item.mediaSourceId,
+              publishedAt: item.publishedAt || new Date().toISOString(),
+            },
+            status: 'published',
+          })
+          episodesCreated += 1
+        }
+      }
+    }
+
+    return { episodesCreated, episodesUpdated }
+  },
+
   async syncSource(documentId: string) {
     const source = await strapi.documents('api::youtube-source.youtube-source').findOne({
       documentId,
@@ -20,7 +116,15 @@ export default ({ strapi }) => ({
       } else if (source.sourceType === 'channel' && source.channelId) {
         items = await youtube.fetchChannelUploads(source.channelId)
       } else if (source.sourceType === 'username' && source.username) {
-        items = await youtube.fetchUsernameUploads(source.username)
+        const channelId = await youtube.resolveChannelIdFromUsername(source.username)
+        if (channelId && channelId !== source.channelId) {
+          await strapi.db.query('api::youtube-source.youtube-source').update({
+            where: { id: source.id },
+            data: { channelId },
+          })
+          source.channelId = channelId
+        }
+        items = await youtube.fetchChannelUploads(channelId)
       } else if (source.sourceType === 'video' && source.videoId) {
         const one = await youtube.fetchVideo(source.videoId)
         items = one ? [one] : []
@@ -40,6 +144,15 @@ export default ({ strapi }) => ({
 
     let imported = 0
     let updated = 0
+    const upsertPayload: Array<{
+      youtubeVideoId: string
+      title: string
+      description: string
+      thumbnailUrl: string
+      publishedAt: string
+      durationSeconds?: number
+      mediaSourceId: number
+    }> = []
 
     for (const raw of items) {
       const normalized = normalizer.normalize(raw)
@@ -102,7 +215,19 @@ export default ({ strapi }) => ({
         })
         imported += 1
       }
+
+      upsertPayload.push({
+        youtubeVideoId: normalized.youtubeVideoId,
+        title: normalized.title,
+        description: normalized.description,
+        thumbnailUrl: normalized.thumbnailUrl,
+        publishedAt: normalized.publishedAt,
+        durationSeconds: normalized.durationSeconds,
+        mediaSourceId,
+      })
     }
+
+    const episodeResult = await this.upsertShowEpisodes(source, upsertPayload)
 
     const total = await strapi.db.query('api::synced-video.synced-video').count({
       where: { youtubeSource: source.id },
@@ -118,10 +243,25 @@ export default ({ strapi }) => ({
     })
 
     strapi.log.info(
-      `YouTube sync complete for source ${documentId}: imported=${imported} updated=${updated}`,
+      `YouTube sync complete for source ${documentId}: imported=${imported} updated=${updated} episodesCreated=${episodeResult.episodesCreated} episodesUpdated=${episodeResult.episodesUpdated}`,
     )
 
-    return { imported, updated, total }
+    return { imported, updated, total, ...episodeResult }
+  },
+
+  async syncShow(showDocumentId: string) {
+    const show = await strapi.documents('api::show.show').findOne({
+      documentId: showDocumentId,
+      populate: ['youtubeSource'],
+    })
+    if (!show) {
+      throw new Error('Show not found')
+    }
+    const source = show.youtubeSource
+    if (!source?.documentId) {
+      throw new Error('Show has no YouTube source configured')
+    }
+    return this.syncSource(source.documentId)
   },
 
   async syncAllEnabledSources() {

@@ -10,7 +10,7 @@ export default ({ env }) => ({
   cron: {
     enabled: true,
     tasks: {
-      youtubeSyncHourly: {
+      youtubeSyncScheduled: {
         task: async ({ strapi }) => {
           try {
             const youtubeSync = strapi.service('api::youtube-source.youtube-sync')
@@ -19,12 +19,12 @@ export default ({ env }) => ({
             }
           } catch (error) {
             strapi.log.error(
-              `YouTube hourly sync failed: ${error instanceof Error ? error.message : String(error)}`,
+              `YouTube scheduled sync failed: ${error instanceof Error ? error.message : String(error)}`,
             )
           }
         },
         options: {
-          rule: '0 * * * *',
+          rule: env('YOUTUBE_SYNC_CRON', '0 * * * *'),
         },
       },
     },

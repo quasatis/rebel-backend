@@ -165,7 +165,9 @@ export default ({ strapi }: { strapi: any }) => ({
                 documentId: String(row.documentId),
                 type: 'episode',
                 title: String(row.title),
-                slug: String(row.show?.slug || row.slug),
+                slug: row.show?.slug
+                  ? `${row.show.slug}/${row.slug}`
+                  : String(row.slug),
                 excerpt: row.description || null,
                 imageUrl: row.thumbnail?.url || null,
                 publishedAt: row.publishedAt || null,

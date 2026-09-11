@@ -152,14 +152,13 @@ export default () => ({
   },
 
   /**
-   * Resolve a YouTube @handle or legacy username to a channel ID, then fetch uploads.
+   * Resolve a YouTube @handle or legacy username to a channel ID.
    */
-  async fetchUsernameUploads(username: string): Promise<YoutubeListItem[]> {
+  async resolveChannelIdFromUsername(username: string): Promise<string> {
     const handle = username.replace(/^@/, '').trim()
-    if (!handle) return []
-
-    // Prefer forHandle (YouTube handles); fall back to forUsername (legacy)
-    let channelId: string | undefined
+    if (!handle) {
+      throw new Error('YouTube username/handle is empty')
+    }
 
     const byHandle = await youtubeGet<{
       items?: Array<{ id?: string }>
@@ -167,7 +166,7 @@ export default () => ({
       part: 'id',
       forHandle: handle,
     })
-    channelId = byHandle.items?.[0]?.id
+    let channelId = byHandle.items?.[0]?.id
 
     if (!channelId) {
       const byUsername = await youtubeGet<{
@@ -183,6 +182,14 @@ export default () => ({
       throw new Error(`YouTube channel not found for username/handle: ${handle}`)
     }
 
+    return channelId
+  },
+
+  /**
+   * Resolve a YouTube @handle or legacy username to a channel ID, then fetch uploads.
+   */
+  async fetchUsernameUploads(username: string): Promise<YoutubeListItem[]> {
+    const channelId = await this.resolveChannelIdFromUsername(username)
     return this.fetchChannelUploads(channelId)
   },
 

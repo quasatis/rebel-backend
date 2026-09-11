@@ -18,6 +18,9 @@
       "multiple": false,
       "allowedTypes": ["images"]
     },
+    "isActive": { "type": "boolean", "default": true },
+    "isFeatured": { "type": "boolean", "default": false },
+    "previewUrl": { "type": "text" },
     "mediaSource": {
       "type": "relation",
       "relation": "manyToOne",
