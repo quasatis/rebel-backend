@@ -67,8 +67,8 @@ function parseDuration(iso?: string): number | undefined {
   return h * 3600 + m * 60 + s
 }
 
-/** Batch video IDs (max 50 per YouTube videos.list call) and attach durations. */
-async function enrichDurations(items: YoutubeListItem[]): Promise<YoutubeListItem[]> {
+/** Batch video IDs (max 50 per YouTube videos.list call) and attach duration + true publish date. */
+async function enrichVideoDetails(items: YoutubeListItem[]): Promise<YoutubeListItem[]> {
   if (!items.length) return items
   const byId = new Map(items.map((item) => [item.id, { ...item }]))
   const ids = [...byId.keys()]
@@ -76,16 +76,24 @@ async function enrichDurations(items: YoutubeListItem[]): Promise<YoutubeListIte
   for (let i = 0; i < ids.length; i += 50) {
     const chunk = ids.slice(i, i + 50)
     const data = await youtubeGet<{
-      items?: Array<{ id?: string; contentDetails?: { duration?: string } }>
+      items?: Array<{
+        id?: string
+        snippet?: { publishedAt?: string }
+        contentDetails?: { duration?: string }
+      }>
     }>('videos', {
-      part: 'contentDetails',
+      part: 'snippet,contentDetails',
       id: chunk.join(','),
     })
     for (const row of data.items || []) {
       if (!row.id) continue
       const existing = byId.get(row.id)
-      if (existing) {
-        existing.durationSeconds = parseDuration(row.contentDetails?.duration)
+      if (!existing) continue
+      existing.durationSeconds = parseDuration(row.contentDetails?.duration)
+      // Prefer the video's own publish date over playlistItems.snippet.publishedAt
+      // (that field is when the item was added to the playlist).
+      if (row.snippet?.publishedAt) {
+        existing.publishedAt = row.snippet.publishedAt
       }
     }
     // Small pause between batches to reduce quota spikes
@@ -111,15 +119,19 @@ export default () => ({
             resourceId?: { videoId?: string }
             thumbnails?: { high?: { url?: string }; medium?: { url?: string } }
           }
+          contentDetails?: {
+            videoId?: string
+            videoPublishedAt?: string
+          }
         }>
       }>('playlistItems', {
-        part: 'snippet',
+        part: 'snippet,contentDetails',
         playlistId,
         maxResults: '50',
         pageToken,
       })
       for (const item of page.items || []) {
-        const videoId = item.snippet?.resourceId?.videoId
+        const videoId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId
         if (!videoId) continue
         items.push({
           id: videoId,
@@ -129,14 +141,18 @@ export default () => ({
             item.snippet?.thumbnails?.high?.url ||
             item.snippet?.thumbnails?.medium?.url ||
             `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-          publishedAt: item.snippet?.publishedAt || new Date().toISOString(),
+          // Prefer original YouTube publish date; snippet.publishedAt is playlist-add time.
+          publishedAt:
+            item.contentDetails?.videoPublishedAt ||
+            item.snippet?.publishedAt ||
+            new Date().toISOString(),
           channelTitle: item.snippet?.channelTitle || '',
         })
       }
       pageToken = page.nextPageToken || ''
       if (pageToken) await sleep(150)
     } while (pageToken)
-    return enrichDurations(items)
+    return enrichVideoDetails(items)
   },
 
   async fetchChannelUploads(channelId: string): Promise<YoutubeListItem[]> {

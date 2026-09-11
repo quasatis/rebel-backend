@@ -16,4 +16,25 @@ export default factories.createCoreController('api::youtube-source.youtube-sourc
       return ctx.internalServerError('Synchronization failed')
     }
   },
+
+  async syncAll(ctx) {
+    try {
+      const results = await strapi.service('api::youtube-source.youtube-sync').syncAllEnabledSources()
+      const failed = results.filter((row: { error?: boolean }) => row.error).length
+      const synced = results.length - failed
+      ctx.body = {
+        data: {
+          synced,
+          failed,
+          total: results.length,
+          results,
+        },
+      }
+    } catch (error) {
+      strapi.log.error(
+        `Manual YouTube sync-all failed: ${error instanceof Error ? error.message : 'unknown'}`,
+      )
+      return ctx.internalServerError('Synchronization failed')
+    }
+  },
 }))

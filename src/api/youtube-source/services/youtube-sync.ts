@@ -72,7 +72,14 @@ export default ({ strapi }) => ({
         if (existing) {
           await strapi.db.query('api::show-episode.show-episode').update({
             where: { id: existing.id },
-            data: episodeData,
+            data: {
+              ...episodeData,
+              // Repair rows imported before the publish-date fix. Only touch
+              // already-published rows so drafts stay drafts.
+              ...(existing.publishedAt && item.publishedAt
+                ? { publishedAt: item.publishedAt }
+                : {}),
+            },
           })
           episodesUpdated += 1
         } else {

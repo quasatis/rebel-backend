@@ -6,6 +6,15 @@ export default {
   routes: [
     {
       method: 'POST',
+      path: '/youtube-sources/sync-all',
+      handler: 'youtube-source.syncAll',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
+    {
+      method: 'POST',
       path: '/youtube-sources/:documentId/sync',
       handler: 'youtube-source.sync',
       config: {

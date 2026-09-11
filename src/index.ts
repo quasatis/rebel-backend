@@ -119,6 +119,8 @@ async function setAuthenticatedPermissions(strapi: Core.Strapi) {
   })
   if (!authRole) return
   await setRoleContentPermissions(strapi, authRole.id, 'full')
+  // YouTube source deletion is admin-only.
+  await revokePermission(strapi, authRole.id, 'api::youtube-source.youtube-source.delete')
 }
 
 async function ensureRole(
@@ -205,6 +207,9 @@ async function seedBackofficeUsers(strapi: Core.Strapi) {
   await setRoleContentPermissions(strapi, adminRole.id, 'full')
   await setRoleContentPermissions(strapi, editorRole.id, 'full')
   await setRoleContentPermissions(strapi, viewerRole.id, 'read')
+  // Editors can manage sources, but only admins may delete them.
+  await revokePermission(strapi, editorRole.id, 'api::youtube-source.youtube-source.delete')
+  await ensurePermission(strapi, adminRole.id, 'api::youtube-source.youtube-source.delete')
 
   await ensureBackofficeUser(strapi, {
     username: 'admin',
