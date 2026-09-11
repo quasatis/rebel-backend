@@ -108,6 +108,7 @@ async function setRoleContentPermissions(
   if (mode === 'full') {
     await ensurePermission(strapi, roleId, 'api::youtube-source.youtube-source.sync')
     await ensurePermission(strapi, roleId, 'plugin::upload.content-api.upload')
+    await ensurePermission(strapi, roleId, 'api::media-upload.media-upload.upload')
   }
 }
 
@@ -141,7 +142,9 @@ async function ensureBackofficeUser(
 ) {
   const userService = strapi.plugin('users-permissions').service('user')
   const existing = await strapi.db.query('plugin::users-permissions.user').findOne({
-    where: { email: data.email },
+    where: {
+      $or: [{ email: data.email }, { username: data.username }],
+    },
   })
 
   if (!existing) {
@@ -149,6 +152,7 @@ async function ensureBackofficeUser(
       username: data.username,
       email: data.email,
       password: data.password,
+      provider: 'local',
       confirmed: true,
       blocked: false,
       role: data.roleId,
@@ -159,7 +163,9 @@ async function ensureBackofficeUser(
 
   await userService.edit(existing.id, {
     username: data.username,
+    email: data.email,
     password: data.password,
+    provider: 'local',
     confirmed: true,
     blocked: false,
     role: data.roleId,
@@ -168,6 +174,17 @@ async function ensureBackofficeUser(
 }
 
 async function seedBackofficeUsers(strapi: Core.Strapi) {
+  // Strapi local auth looks up users with provider='local'. Missing provider => 400.
+  const missingProvider = await strapi.db.query('plugin::users-permissions.user').findMany({
+    where: { provider: { $null: true } },
+  })
+  for (const user of missingProvider) {
+    await strapi.db.query('plugin::users-permissions.user').update({
+      where: { id: user.id },
+      data: { provider: 'local' },
+    })
+  }
+
   const adminRole = await ensureRole(strapi, {
     name: 'Admin',
     type: 'admin',
@@ -241,6 +258,39 @@ async function seedDemoContent(strapi: Core.Strapi) {
     },
   )
 
+  const categoryMusic = await ensureDocument(
+    'api::category.category',
+    'music',
+    { slug: 'music' },
+    {
+      name: 'Music',
+      slug: 'music',
+      description: 'Releases, artists, and the sound of the continent.',
+    },
+  )
+
+  const categoryShows = await ensureDocument(
+    'api::category.category',
+    'shows',
+    { slug: 'shows' },
+    {
+      name: 'Shows',
+      slug: 'shows',
+      description: 'Episodes, conversations, and performances.',
+    },
+  )
+
+  const categoryNews = await ensureDocument(
+    'api::category.category',
+    'news',
+    { slug: 'news' },
+    {
+      name: 'News',
+      slug: 'news',
+      description: 'Headlines from African and Black creative culture.',
+    },
+  )
+
   const author = await ensureDocument(
     'api::author.author',
     'rebel-desk',
@@ -307,6 +357,137 @@ async function seedDemoContent(strapi: Core.Strapi) {
     },
     { publish: true },
   )
+
+  const articleOxlade = await ensureDocument(
+    'api::article.article',
+    'oxlade-drops-new-single-ku-lo-sa',
+    { slug: 'oxlade-drops-new-single-ku-lo-sa' },
+    {
+      title: "Oxlade Drops New Single 'KU LO SA'",
+      slug: 'oxlade-drops-new-single-ku-lo-sa',
+      excerpt: 'The Afropop star returns with a nocturnal anthem built for late drives and louder speakers.',
+      content: [
+        {
+          type: 'paragraph',
+          children: [{ type: 'text', text: 'KU LO SA lands as another chapter in Oxlade’s rise across the continent and diaspora.' }],
+        },
+      ],
+      featured: true,
+      readingTime: 4,
+      category: categoryMusic.documentId,
+      author: author.documentId,
+      tags: [tag.documentId],
+    },
+    { publish: true },
+  )
+
+  const articleFashion = await ensureDocument(
+    'api::article.article',
+    'the-new-wave-of-african-fashion-is-here',
+    { slug: 'the-new-wave-of-african-fashion-is-here' },
+    {
+      title: 'The New Wave of African Fashion Is Here',
+      slug: 'the-new-wave-of-african-fashion-is-here',
+      excerpt: 'Designers across Lagos, Accra, and Johannesburg are rewriting the global runway.',
+      content: [
+        {
+          type: 'paragraph',
+          children: [{ type: 'text', text: 'From atelier to street, a new generation of African fashion houses is setting the pace.' }],
+        },
+      ],
+      featured: false,
+      readingTime: 5,
+      category: category.documentId,
+      author: author.documentId,
+    },
+    { publish: true },
+  )
+
+  const articleEpisode = await ensureDocument(
+    'api::article.article',
+    'episode-7-the-creative-process',
+    { slug: 'episode-7-the-creative-process' },
+    {
+      title: 'Episode 7: The Creative Process',
+      slug: 'episode-7-the-creative-process',
+      excerpt: 'Behind the sessions, the rituals, and the late nights that shape Rebel Shows.',
+      content: [
+        {
+          type: 'paragraph',
+          children: [{ type: 'text', text: 'Episode 7 opens the door on how Rebel Sessions are built — from guest booking to final cut.' }],
+        },
+      ],
+      featured: false,
+      readingTime: 3,
+      category: categoryShows.documentId,
+      author: author.documentId,
+    },
+    { publish: true },
+  )
+
+  const articleAfrobeats = await ensureDocument(
+    'api::article.article',
+    'afrobeats-hits-a-new-global-milestone',
+    { slug: 'afrobeats-hits-a-new-global-milestone' },
+    {
+      title: 'Afrobeats Hits a New Global Milestone',
+      slug: 'afrobeats-hits-a-new-global-milestone',
+      excerpt: 'Charts, streaming records, and a sound that refuses to stay in one city.',
+      content: [
+        {
+          type: 'paragraph',
+          children: [{ type: 'text', text: 'Afrobeats continues its worldwide run with new chart peaks and festival headline slots.' }],
+        },
+      ],
+      featured: false,
+      readingTime: 4,
+      category: categoryNews.documentId,
+      author: author.documentId,
+      tags: [tag.documentId],
+    },
+    { publish: true },
+  )
+
+  const articleJayC = await ensureDocument(
+    'api::article.article',
+    'inside-the-studio-with-jay-c',
+    { slug: 'inside-the-studio-with-jay-c' },
+    {
+      title: 'Inside the Studio with Jay C',
+      slug: 'inside-the-studio-with-jay-c',
+      excerpt: 'A quiet night session with one of the producers shaping the Rebel sound.',
+      content: [
+        {
+          type: 'paragraph',
+          children: [{ type: 'text', text: 'Jay C walks us through pads, percussion, and the patience behind a hit record.' }],
+        },
+      ],
+      featured: false,
+      readingTime: 6,
+      category: categoryMusic.documentId,
+      author: author.documentId,
+    },
+    { publish: true },
+  )
+
+  // Pin publishedAt order so Latest grid matches mock hierarchy (featured Oxlade first).
+  const publishOrder = [
+    { doc: articleOxlade, daysAgo: 1 },
+    { doc: articleFashion, daysAgo: 2 },
+    { doc: articleEpisode, daysAgo: 3 },
+    { doc: articleAfrobeats, daysAgo: 4 },
+    { doc: articleJayC, daysAgo: 5 },
+    { doc: article, daysAgo: 6 },
+  ]
+  for (const item of publishOrder) {
+    const publishedAt = new Date()
+    publishedAt.setDate(publishedAt.getDate() - item.daysAgo)
+    await strapi.documents('api::article.article').update({
+      documentId: item.doc.documentId,
+      data: { publishedAt: publishedAt.toISOString() } as never,
+      status: 'published',
+    })
+  }
 
   const artist = await ensureDocument(
     'api::artist.artist',
@@ -496,10 +677,10 @@ async function seedDemoContent(strapi: Core.Strapi) {
   await ensureDocument(
     'api::homepage-feature.homepage-feature',
     'hero-1',
-    { headline: 'The Sound of a New Generation' },
+    { headline: 'The Sound of a\nNew Generation' },
     {
       contentType: 'article',
-      headline: 'The Sound of a New Generation',
+      headline: 'The Sound of a\nNew Generation',
       description: "Discover the artists shaping Africa's creative future.",
       categoryLabel: 'Culture',
       ctaLabel: 'Explore story →',
@@ -511,19 +692,98 @@ async function seedDemoContent(strapi: Core.Strapi) {
     },
   )
 
+  await ensureDocument(
+    'api::homepage-feature.homepage-feature',
+    'hero-2',
+    { headline: "Oxlade Drops New\nSingle 'KU LO SA'" },
+    {
+      contentType: 'article',
+      headline: "Oxlade Drops New\nSingle 'KU LO SA'",
+      description: 'A nocturnal Afropop anthem built for late drives.',
+      categoryLabel: 'Music',
+      ctaLabel: 'Explore story →',
+      ctaUrl: '/news/oxlade-drops-new-single-ku-lo-sa',
+      position: 2,
+      priority: 2,
+      active: true,
+      article: articleOxlade.documentId,
+    },
+  )
+
+  await ensureDocument(
+    'api::homepage-feature.homepage-feature',
+    'hero-3',
+    { headline: 'The New Wave of\nAfrican Fashion Is Here' },
+    {
+      contentType: 'article',
+      headline: 'The New Wave of\nAfrican Fashion Is Here',
+      description: 'Designers rewriting the global runway from Lagos to Accra.',
+      categoryLabel: 'Culture',
+      ctaLabel: 'Explore story →',
+      ctaUrl: '/news/the-new-wave-of-african-fashion-is-here',
+      position: 3,
+      priority: 3,
+      active: true,
+      article: articleFashion.documentId,
+    },
+  )
+
+  await ensureDocument(
+    'api::homepage-feature.homepage-feature',
+    'hero-4',
+    { headline: 'Afrobeats Hits a\nNew Global Milestone' },
+    {
+      contentType: 'article',
+      headline: 'Afrobeats Hits a\nNew Global Milestone',
+      description: 'Charts, festivals, and a sound that travels.',
+      categoryLabel: 'News',
+      ctaLabel: 'Explore story →',
+      ctaUrl: '/news/afrobeats-hits-a-new-global-milestone',
+      position: 4,
+      priority: 4,
+      active: true,
+      article: articleAfrobeats.documentId,
+    },
+  )
+
+  await ensureDocument(
+    'api::homepage-feature.homepage-feature',
+    'hero-5',
+    { headline: 'Inside the Studio\nwith Jay C' },
+    {
+      contentType: 'article',
+      headline: 'Inside the Studio\nwith Jay C',
+      description: 'Pads, percussion, and the patience behind a hit.',
+      categoryLabel: 'Music',
+      ctaLabel: 'Explore story →',
+      ctaUrl: '/news/inside-the-studio-with-jay-c',
+      position: 5,
+      priority: 5,
+      active: true,
+      article: articleJayC.documentId,
+    },
+  )
+
   const newsletter = await strapi.documents('api::newsletter-config.newsletter-config').findMany({
     limit: 1,
   })
+  const newsletterData = {
+    headline: "Don't just follow the culture.",
+    accentText: 'Be part of it.',
+    supportingText:
+      'Get exclusive updates on music, shows, events and stories straight to your inbox.',
+    placeholder: 'Your email address',
+    ctaLabel: 'Join',
+    active: true,
+  }
   if (!newsletter.length) {
     await strapi.documents('api::newsletter-config.newsletter-config').create({
-      data: {
-        headline: "Don't just follow the culture.",
-        accentText: 'Be part of it.',
-        supportingText: 'Exclusive updates from REBEL AFRIQUE.',
-        placeholder: 'Your email address',
-        ctaLabel: 'Join',
-        active: true,
-      },
+      data: newsletterData,
+    })
+  } else {
+    await strapi.documents('api::newsletter-config.newsletter-config').update({
+      documentId: newsletter[0].documentId,
+      data: newsletterData as never,
     })
   }
 

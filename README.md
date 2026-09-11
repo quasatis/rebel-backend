@@ -25,9 +25,16 @@ Generate unique values for `APP_KEYS`, `API_TOKEN_SALT`, `ADMIN_JWT_SECRET`, `TR
 
 | Variable | Purpose |
 |----------|---------|
+| `CLOUDINARY_NAME` | Cloudinary cloud name (required for media uploads) |
+| `CLOUDINARY_KEY` | Cloudinary API key |
+| `CLOUDINARY_SECRET` | Cloudinary API secret |
 | `YOUTUBE_API_KEY` | YouTube Data API v3 key |
 | `NETLIFY_BUILD_HOOK_URL` | Trigger frontend rebuilds |
 | `CORS_ORIGIN` | Comma-separated frontend origins |
+
+New media uploads are stored in Cloudinary when these variables are set. Legacy files uploaded before Cloudinary was configured remain on the local `public/uploads` volume and are still served at `/uploads/...` URLs.
+
+Uploads are organized in Cloudinary folders by site section: `Home`, `Music`, `Shows`, `News`, `Studio`, `Events`, `About`, and `General` (fallback for Strapi Admin uploads).
 
 3. Build and start:
 
