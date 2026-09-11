@@ -674,95 +674,102 @@ async function seedDemoContent(strapi: Core.Strapi) {
     },
   )
 
-  await ensureDocument(
-    'api::homepage-feature.homepage-feature',
-    'hero-1',
-    { headline: 'The Sound of a\nNew Generation' },
-    {
-      contentType: 'article',
-      headline: 'The Sound of a\nNew Generation',
-      description: "Discover the artists shaping Africa's creative future.",
-      categoryLabel: 'Culture',
-      ctaLabel: 'Explore story →',
-      ctaUrl: '/news/the-sound-of-a-new-generation',
-      position: 1,
-      priority: 1,
-      active: true,
-      article: article.documentId,
-    },
-  )
+  const existingHeroes = await strapi.documents('api::homepage-feature.homepage-feature').findMany({
+    limit: 1,
+  })
+  if (!existingHeroes.length) {
+    await ensureDocument(
+      'api::homepage-feature.homepage-feature',
+      'hero-1',
+      { ctaUrl: '/news/the-sound-of-a-new-generation' },
+      {
+        contentType: 'article',
+        headline: 'The Sound of a\nNew Generation',
+        description: "Discover the artists shaping Africa's creative future.",
+        categoryLabel: 'Culture',
+        ctaLabel: 'Explore story →',
+        ctaUrl: '/news/the-sound-of-a-new-generation',
+        position: 1,
+        priority: 1,
+        active: true,
+        article: article.documentId,
+      },
+    )
 
-  await ensureDocument(
-    'api::homepage-feature.homepage-feature',
-    'hero-2',
-    { headline: "Oxlade Drops New\nSingle 'KU LO SA'" },
-    {
-      contentType: 'article',
-      headline: "Oxlade Drops New\nSingle 'KU LO SA'",
-      description: 'A nocturnal Afropop anthem built for late drives.',
-      categoryLabel: 'Music',
-      ctaLabel: 'Explore story →',
-      ctaUrl: '/news/oxlade-drops-new-single-ku-lo-sa',
-      position: 2,
-      priority: 2,
-      active: true,
-      article: articleOxlade.documentId,
-    },
-  )
+    await ensureDocument(
+      'api::homepage-feature.homepage-feature',
+      'hero-2',
+      { ctaUrl: '/news/oxlade-drops-new-single-ku-lo-sa' },
+      {
+        contentType: 'article',
+        headline: "Oxlade Drops New\nSingle 'KU LO SA'",
+        description: 'A nocturnal Afropop anthem built for late drives.',
+        categoryLabel: 'Music',
+        ctaLabel: 'Explore story →',
+        ctaUrl: '/news/oxlade-drops-new-single-ku-lo-sa',
+        position: 2,
+        priority: 2,
+        active: true,
+        article: articleOxlade.documentId,
+      },
+    )
 
-  await ensureDocument(
-    'api::homepage-feature.homepage-feature',
-    'hero-3',
-    { headline: 'The New Wave of\nAfrican Fashion Is Here' },
-    {
-      contentType: 'article',
-      headline: 'The New Wave of\nAfrican Fashion Is Here',
-      description: 'Designers rewriting the global runway from Lagos to Accra.',
-      categoryLabel: 'Culture',
-      ctaLabel: 'Explore story →',
-      ctaUrl: '/news/the-new-wave-of-african-fashion-is-here',
-      position: 3,
-      priority: 3,
-      active: true,
-      article: articleFashion.documentId,
-    },
-  )
+    await ensureDocument(
+      'api::homepage-feature.homepage-feature',
+      'hero-3',
+      { ctaUrl: '/news/the-new-wave-of-african-fashion-is-here' },
+      {
+        contentType: 'article',
+        headline: 'The New Wave of\nAfrican Fashion Is Here',
+        description: 'Designers rewriting the global runway from Lagos to Accra.',
+        categoryLabel: 'Culture',
+        ctaLabel: 'Explore story →',
+        ctaUrl: '/news/the-new-wave-of-african-fashion-is-here',
+        position: 3,
+        priority: 3,
+        active: true,
+        article: articleFashion.documentId,
+      },
+    )
 
-  await ensureDocument(
-    'api::homepage-feature.homepage-feature',
-    'hero-4',
-    { headline: 'Afrobeats Hits a\nNew Global Milestone' },
-    {
-      contentType: 'article',
-      headline: 'Afrobeats Hits a\nNew Global Milestone',
-      description: 'Charts, festivals, and a sound that travels.',
-      categoryLabel: 'News',
-      ctaLabel: 'Explore story →',
-      ctaUrl: '/news/afrobeats-hits-a-new-global-milestone',
-      position: 4,
-      priority: 4,
-      active: true,
-      article: articleAfrobeats.documentId,
-    },
-  )
+    await ensureDocument(
+      'api::homepage-feature.homepage-feature',
+      'hero-4',
+      { ctaUrl: '/news/afrobeats-hits-a-new-global-milestone' },
+      {
+        contentType: 'article',
+        headline: 'Afrobeats Hits a\nNew Global Milestone',
+        description: 'Charts, festivals, and a sound that travels.',
+        categoryLabel: 'News',
+        ctaLabel: 'Explore story →',
+        ctaUrl: '/news/afrobeats-hits-a-new-global-milestone',
+        position: 4,
+        priority: 4,
+        active: true,
+        article: articleAfrobeats.documentId,
+      },
+    )
 
-  await ensureDocument(
-    'api::homepage-feature.homepage-feature',
-    'hero-5',
-    { headline: 'Inside the Studio\nwith Jay C' },
-    {
-      contentType: 'article',
-      headline: 'Inside the Studio\nwith Jay C',
-      description: 'Pads, percussion, and the patience behind a hit.',
-      categoryLabel: 'Music',
-      ctaLabel: 'Explore story →',
-      ctaUrl: '/news/inside-the-studio-with-jay-c',
-      position: 5,
-      priority: 5,
-      active: true,
-      article: articleJayC.documentId,
-    },
-  )
+    await ensureDocument(
+      'api::homepage-feature.homepage-feature',
+      'hero-5',
+      { ctaUrl: '/news/inside-the-studio-with-jay-c' },
+      {
+        contentType: 'article',
+        headline: 'Inside the Studio\nwith Jay C',
+        description: 'Pads, percussion, and the patience behind a hit.',
+        categoryLabel: 'Music',
+        ctaLabel: 'Explore story →',
+        ctaUrl: '/news/inside-the-studio-with-jay-c',
+        position: 5,
+        priority: 5,
+        active: true,
+        article: articleJayC.documentId,
+      },
+    )
+  } else {
+    strapi.log.info('Skipping homepage-feature seed — features already exist')
+  }
 
   const newsletter = await strapi.documents('api::newsletter-config.newsletter-config').findMany({
     limit: 1,
