@@ -775,6 +775,8 @@ async function seedDemoContent(strapi: Core.Strapi) {
   const homepageSettings = await strapi
     .documents('api::homepage-settings.homepage-settings')
     .findMany({ limit: 1 })
+  const defaultFooterTagline =
+    'The platform for black creatives by black creatives. Music, Culture, Community.'
   if (!homepageSettings.length) {
     await strapi.documents('api::homepage-settings.homepage-settings').create({
       data: {
@@ -791,7 +793,13 @@ async function seedDemoContent(strapi: Core.Strapi) {
         eventsTitle: 'Events',
         eventsEnabled: true,
         newsletterEnabled: true,
+        footerTagline: defaultFooterTagline,
       },
+    })
+  } else if (!(homepageSettings[0] as { footerTagline?: string | null }).footerTagline) {
+    await strapi.documents('api::homepage-settings.homepage-settings').update({
+      documentId: homepageSettings[0].documentId,
+      data: { footerTagline: defaultFooterTagline } as never,
     })
   }
 
@@ -875,7 +883,35 @@ export default {
 
     if (process.env.SEED_DEMO_CONTENT === 'true') {
       try {
-        await seedDemoContent(strapi)
+        // Run demo seed once. Re-running on every bootstrap recreated deleted
+        // demo rows (e.g. Rebel Essentials) after intentional backoffice deletes.
+        const seedStore = strapi.store({ type: 'core', name: 'rebel_seed' })
+        const force = process.env.FORCE_SEED_DEMO_CONTENT === 'true'
+        const alreadySeeded = (await seedStore.get({ key: 'demo_content' })) === true
+
+        if (!force && alreadySeeded) {
+          // no-op
+        } else if (!force) {
+          // Prior installs seeded without a marker — detect and mark so we do
+          // not recreate rows the editor already deleted.
+          const prior = await strapi.documents('api::artist.artist').findMany({
+            filters: { slug: 'oxlade' },
+            limit: 1,
+          })
+          if (prior.length) {
+            await seedStore.set({ key: 'demo_content', value: true })
+            strapi.log.info(
+              'Demo content seed marker set (prior seed detected); skipping recreate.',
+            )
+          } else {
+            await seedDemoContent(strapi)
+            await seedStore.set({ key: 'demo_content', value: true })
+          }
+        } else {
+          await seedDemoContent(strapi)
+          await seedStore.set({ key: 'demo_content', value: true })
+          strapi.log.info('Demo content seed completed (forced).')
+        }
       } catch (error) {
         strapi.log.error(
           `Demo seed failed: ${error instanceof Error ? error.message : 'unknown'}`,

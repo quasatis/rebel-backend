@@ -20,6 +20,10 @@
     "studioEnabled": { "type": "boolean", "default": true },
     "eventsTitle": { "type": "string", "default": "Events" },
     "eventsEnabled": { "type": "boolean", "default": true },
-    "newsletterEnabled": { "type": "boolean", "default": true }
+    "newsletterEnabled": { "type": "boolean", "default": true },
+    "footerTagline": {
+      "type": "text",
+      "default": "The platform for black creatives by black creatives. Music, Culture, Community."
+    }
   }
 }
