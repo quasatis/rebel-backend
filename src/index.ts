@@ -1,4 +1,8 @@
+import dns from 'node:dns'
 import type { Core } from '@strapi/strapi'
+
+// Docker Desktop on Windows advertises NAT64 IPv6 for Cloudinary that is unreachable.
+dns.setDefaultResultOrder('ipv4first')
 
 const CONTENT_UIDS = [
   'api::article.article',
@@ -421,7 +425,7 @@ async function seedDemoContent(strapi: Core.Strapi) {
       content: [
         {
           type: 'paragraph',
-          children: [{ type: 'text', text: 'Episode 7 opens the door on how Rebel Sessions are built — from guest booking to final cut.' }],
+          children: [{ type: 'text', text: 'Episode 7 opens the door on how Rebel Shows are built — from guest booking to final cut.' }],
         },
       ],
       featured: false,
@@ -552,35 +556,6 @@ async function seedDemoContent(strapi: Core.Strapi) {
       active: true,
       artist: artist.documentId,
       mediaSource: mediaSource.documentId,
-    },
-    { publish: true },
-  )
-
-  const show = await ensureDocument(
-    'api::show.show',
-    'rebel-sessions',
-    { slug: 'rebel-sessions' },
-    {
-      title: 'Rebel Sessions',
-      slug: 'rebel-sessions',
-      description: 'Live conversations and performances with Black creatives.',
-      featured: true,
-    },
-    { publish: true },
-  )
-
-  await ensureDocument(
-    'api::show-episode.show-episode',
-    'episode-01-opening-night',
-    { slug: 'episode-01-opening-night' },
-    {
-      title: 'Episode 01 — Opening Night',
-      slug: 'episode-01-opening-night',
-      description: 'The debut episode of Rebel Sessions.',
-      episodeNumber: 1,
-      durationSeconds: 212,
-      mediaSource: mediaSource.documentId,
-      show: show.documentId,
     },
     { publish: true },
   )
@@ -781,24 +756,20 @@ async function seedDemoContent(strapi: Core.Strapi) {
   const newsletter = await strapi.documents('api::newsletter-config.newsletter-config').findMany({
     limit: 1,
   })
-  const newsletterData = {
-    headline: "Don't just follow the culture.",
-    accentText: 'Be part of it.',
-    supportingText:
-      'Get exclusive updates on music, shows, events and stories straight to your inbox.',
-    placeholder: 'Your email address',
-    ctaLabel: 'Join',
-    active: true,
-  }
   if (!newsletter.length) {
     await strapi.documents('api::newsletter-config.newsletter-config').create({
-      data: newsletterData,
+      data: {
+        headline: "Don't just follow the culture.",
+        accentText: 'Be part of it.',
+        supportingText:
+          'Get exclusive updates on music, shows, events and stories\nstraight to your inbox.',
+        placeholder: 'Your email address',
+        ctaLabel: 'Join',
+        active: true,
+      },
     })
   } else {
-    await strapi.documents('api::newsletter-config.newsletter-config').update({
-      documentId: newsletter[0].documentId,
-      data: newsletterData as never,
-    })
+    strapi.log.info('Skipping newsletter-config seed — config already exists')
   }
 
   const homepageSettings = await strapi

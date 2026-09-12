@@ -32,6 +32,21 @@ function normalizeType(raw: string): PublicSearchType | '' {
   return t as PublicSearchType
 }
 
+function mediaThumb(row: any): string | null {
+  const media = row?.mediaSource
+  if (row?.thumbnail?.url) return String(row.thumbnail.url)
+  if (media?.thumbnailUrl) return String(media.thumbnailUrl)
+  if (media?.provider === 'youtube' && media?.externalId) {
+    return `https://i.ytimg.com/vi/${media.externalId}/hqdefault.jpg`
+  }
+  return null
+}
+
+function assetUrl(row: any, key: string): string | null {
+  const url = row?.[key]?.url
+  return url ? String(url) : null
+}
+
 export default ({ strapi }: { strapi: any }) => ({
   async search({
     q,
@@ -67,6 +82,8 @@ export default ({ strapi }: { strapi: any }) => ({
     const results: SearchHit[] = []
     const wants = (name: PublicSearchType) => !filterType || filterType === name
     const tasks: Promise<void>[] = []
+    // Gather enough hits per type so combined pagination is accurate.
+    const gatherLimit = Math.min(200, Math.max(safePageSize * 5, 50))
 
     if (wants('article')) {
       tasks.push(
@@ -75,8 +92,8 @@ export default ({ strapi }: { strapi: any }) => ({
           .findMany({
             filters: { title: contains },
             status: 'published',
-            limit: safePageSize,
-            populate: ['featuredImage', 'category'],
+            limit: gatherLimit,
+            populate: { featuredImage: true, category: true },
           })
           .then((rows: any[]) => {
             rows.forEach((row) =>
@@ -87,7 +104,7 @@ export default ({ strapi }: { strapi: any }) => ({
                 title: String(row.title),
                 slug: String(row.slug),
                 excerpt: row.excerpt || null,
-                imageUrl: row.featuredImage?.url || null,
+                imageUrl: assetUrl(row, 'featuredImage'),
                 category: row.category?.name || null,
                 publishedAt: row.publishedAt || null,
               }),
@@ -103,8 +120,8 @@ export default ({ strapi }: { strapi: any }) => ({
           .findMany({
             filters: { name: contains },
             status: 'published',
-            limit: safePageSize,
-            populate: ['profileImage'],
+            limit: gatherLimit,
+            populate: { profileImage: true },
           })
           .then((rows: any[]) => {
             rows.forEach((row) =>
@@ -115,7 +132,7 @@ export default ({ strapi }: { strapi: any }) => ({
                 title: String(row.name),
                 slug: String(row.slug),
                 excerpt: row.biography || null,
-                imageUrl: row.profileImage?.url || null,
+                imageUrl: assetUrl(row, 'profileImage'),
               }),
             )
           }),
@@ -129,8 +146,8 @@ export default ({ strapi }: { strapi: any }) => ({
           .findMany({
             filters: { title: contains },
             status: 'published',
-            limit: safePageSize,
-            populate: ['coverImage'],
+            limit: gatherLimit,
+            populate: { coverImage: true },
           })
           .then((rows: any[]) => {
             rows.forEach((row) =>
@@ -141,7 +158,7 @@ export default ({ strapi }: { strapi: any }) => ({
                 title: String(row.title),
                 slug: String(row.slug),
                 excerpt: row.description || null,
-                imageUrl: row.coverImage?.url || null,
+                imageUrl: assetUrl(row, 'coverImage'),
               }),
             )
           }),
@@ -155,8 +172,12 @@ export default ({ strapi }: { strapi: any }) => ({
           .findMany({
             filters: { title: contains },
             status: 'published',
-            limit: safePageSize,
-            populate: ['thumbnail', 'show'],
+            limit: gatherLimit,
+            populate: {
+              thumbnail: true,
+              mediaSource: true,
+              show: true,
+            },
           })
           .then((rows: any[]) => {
             rows.forEach((row) =>
@@ -169,7 +190,7 @@ export default ({ strapi }: { strapi: any }) => ({
                   ? `${row.show.slug}/${row.slug}`
                   : String(row.slug),
                 excerpt: row.description || null,
-                imageUrl: row.thumbnail?.url || null,
+                imageUrl: mediaThumb(row),
                 publishedAt: row.publishedAt || null,
               }),
             )
@@ -184,8 +205,11 @@ export default ({ strapi }: { strapi: any }) => ({
           .findMany({
             filters: { title: contains, visibility: 'public' },
             status: 'published',
-            limit: safePageSize,
-            populate: ['thumbnail'],
+            limit: gatherLimit,
+            populate: {
+              thumbnail: true,
+              mediaSource: true,
+            },
           })
           .then((rows: any[]) => {
             rows.forEach((row) =>
@@ -196,7 +220,7 @@ export default ({ strapi }: { strapi: any }) => ({
                 title: String(row.title),
                 slug: String(row.slug),
                 excerpt: row.description || null,
-                imageUrl: row.thumbnail?.url || null,
+                imageUrl: mediaThumb(row),
                 publishedAt: row.releaseDate || null,
               }),
             )
@@ -211,8 +235,8 @@ export default ({ strapi }: { strapi: any }) => ({
           .findMany({
             filters: { title: contains },
             status: 'published',
-            limit: safePageSize,
-            populate: ['coverImage'],
+            limit: gatherLimit,
+            populate: { coverImage: true },
           })
           .then((rows: any[]) => {
             rows.forEach((row) =>
@@ -223,7 +247,7 @@ export default ({ strapi }: { strapi: any }) => ({
                 title: String(row.title),
                 slug: String(row.slug),
                 excerpt: row.description || null,
-                imageUrl: row.coverImage?.url || null,
+                imageUrl: assetUrl(row, 'coverImage'),
               }),
             )
           }),
@@ -237,8 +261,8 @@ export default ({ strapi }: { strapi: any }) => ({
           .findMany({
             filters: { title: contains },
             status: 'published',
-            limit: safePageSize,
-            populate: ['coverImage'],
+            limit: gatherLimit,
+            populate: { coverImage: true },
           })
           .then((rows: any[]) => {
             rows.forEach((row) =>
@@ -249,7 +273,7 @@ export default ({ strapi }: { strapi: any }) => ({
                 title: String(row.title),
                 slug: String(row.slug),
                 excerpt: row.description || null,
-                imageUrl: row.coverImage?.url || null,
+                imageUrl: assetUrl(row, 'coverImage'),
               }),
             )
           }),
@@ -263,8 +287,8 @@ export default ({ strapi }: { strapi: any }) => ({
           .findMany({
             filters: { title: contains },
             status: 'published',
-            limit: safePageSize,
-            populate: ['featuredImage', 'category'],
+            limit: gatherLimit,
+            populate: { featuredImage: true, category: true },
           })
           .then((rows: any[]) => {
             rows.forEach((row) =>
@@ -275,7 +299,7 @@ export default ({ strapi }: { strapi: any }) => ({
                 title: String(row.title),
                 slug: String(row.slug),
                 excerpt: row.description || null,
-                imageUrl: row.featuredImage?.url || null,
+                imageUrl: assetUrl(row, 'featuredImage'),
                 category: row.category?.name || null,
                 publishedAt: row.startDate || null,
               }),
@@ -285,6 +309,13 @@ export default ({ strapi }: { strapi: any }) => ({
     }
 
     await Promise.all(tasks)
+
+    results.sort((a, b) => {
+      const aTime = a.publishedAt ? new Date(a.publishedAt).getTime() : 0
+      const bTime = b.publishedAt ? new Date(b.publishedAt).getTime() : 0
+      if (bTime !== aTime) return bTime - aTime
+      return a.title.localeCompare(b.title)
+    })
 
     const total = results.length
     const start = (safePage - 1) * safePageSize

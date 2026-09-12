@@ -8,11 +8,16 @@
   },
   "options": { "draftAndPublish": false },
   "attributes": {
-    "headline": { "type": "string" },
+    "headline": { "type": "text" },
     "accentText": { "type": "string" },
     "supportingText": { "type": "text" },
     "placeholder": { "type": "string" },
     "ctaLabel": { "type": "string" },
+    "coverImage": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"]
+    },
     "active": { "type": "boolean", "default": true }
   }
 }

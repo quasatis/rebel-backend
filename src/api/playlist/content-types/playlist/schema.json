@@ -21,6 +21,11 @@
       "relation": "manyToOne",
       "target": "api::media-source.media-source"
     },
+    "spotifySource": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::media-source.media-source"
+    },
     "artist": {
       "type": "relation",
       "relation": "manyToOne",

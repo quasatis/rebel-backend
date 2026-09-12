@@ -1,3 +1,14 @@
+import dns from 'node:dns'
+import https from 'node:https'
+
+dns.setDefaultResultOrder('ipv4first')
+
+const cloudinaryAgent = new https.Agent({
+  family: 4,
+  autoSelectFamily: false,
+  keepAlive: true,
+})
+
 export default ({ env }) => ({
   'users-permissions': {
     config: {
@@ -16,9 +27,9 @@ export default ({ env }) => ({
         api_secret: env('CLOUDINARY_SECRET'),
       },
       actionOptions: {
-        upload: { folder: 'General' },
-        uploadStream: { folder: 'General' },
-        delete: {},
+        upload: { folder: 'General', agent: cloudinaryAgent },
+        uploadStream: { folder: 'General', agent: cloudinaryAgent },
+        delete: { agent: cloudinaryAgent },
       },
     },
   },

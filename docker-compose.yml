@@ -39,6 +39,7 @@ services:
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:-strapi}
       HOST: 0.0.0.0
       PORT: 1337
+      NODE_OPTIONS: --dns-result-order=ipv4first --no-network-family-autoselection
     volumes:
       - strapi_uploads:/opt/app/public/uploads
     ports:

@@ -60,7 +60,7 @@ Bootstrap always creates Users & Permissions roles/users for the custom backoffi
 
 Strapi **Admin** (system) remains at http://localhost:1338/admin and is separate from these accounts.
 
-When `SEED_DEMO_CONTENT=true`, bootstrap also creates demo editorial content (article, artist, release, show, studio video, event, homepage feature).
+When `SEED_DEMO_CONTENT=true`, bootstrap also creates demo editorial content (article, artist, release, studio video, event, homepage feature).
 
 Backoffice: http://localhost:3001/login
 

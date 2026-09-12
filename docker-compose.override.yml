@@ -11,6 +11,7 @@ services:
     environment:
       # `strapi develop` disables autoReload under NODE_ENV=production.
       NODE_ENV: development
+      NODE_OPTIONS: --dns-result-order=ipv4first --no-network-family-autoselection
       # Windows bind mounts don't forward inotify events, so watch by polling.
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: "400"

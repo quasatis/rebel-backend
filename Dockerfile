@@ -41,6 +41,7 @@ COPY --from=build --chown=strapi:strapi /opt/app ./
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=1337
+ENV NODE_OPTIONS="--dns-result-order=ipv4first --no-network-family-autoselection"
 
 USER strapi
 EXPOSE 1337
