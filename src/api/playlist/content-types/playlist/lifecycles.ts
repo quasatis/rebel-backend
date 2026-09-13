@@ -68,31 +68,52 @@ function normalizeOrder(value: unknown): number | null {
   return Math.trunc(n)
 }
 
+/** Resolve a relation write value (string id, object, or Strapi 5 set/connect). */
 function relationDocumentId(value: unknown): string | null {
   if (value == null || value === '') return null
   if (typeof value === 'string') return value
   if (typeof value === 'number') return String(value)
-  if (typeof value === 'object' && value && 'documentId' in value) {
-    return String((value as { documentId: string }).documentId || '') || null
+  if (typeof value !== 'object') return null
+
+  const obj = value as Record<string, unknown>
+
+  for (const key of ['set', 'connect'] as const) {
+    const list = obj[key]
+    if (Array.isArray(list) && list.length) {
+      return relationDocumentId(list[0])
+    }
   }
-  if (typeof value === 'object' && value && 'id' in value) {
-    return String((value as { id: string | number }).id || '') || null
-  }
+
+  if (typeof obj.documentId === 'string' && obj.documentId) return obj.documentId
+  if (obj.id != null && obj.id !== '') return String(obj.id)
   return null
+}
+
+function isRelationCleared(value: unknown): boolean {
+  if (value == null || value === '') return true
+  if (typeof value !== 'object') return false
+  const obj = value as Record<string, unknown>
+  if (Array.isArray(obj.set) && obj.set.length === 0) return true
+  if ('disconnect' in obj && !('set' in obj) && !('connect' in obj)) return true
+  return false
 }
 
 /**
  * When an editor picks a YouTube Source, also attach the matching Media Source
- * so the public site can embed it.
+ * so the public site can embed it (youtube-source is not public).
  */
 async function linkYoutubeMediaSource(data: Record<string, unknown>) {
   if (!('youtubeSource' in data)) return
   const strapi = getStrapi()
-  const youtubeDocumentId = relationDocumentId(data.youtubeSource)
-  if (!youtubeDocumentId) {
+
+  if (isRelationCleared(data.youtubeSource)) {
     data.mediaSource = null
     return
   }
+
+  const youtubeDocumentId = relationDocumentId(data.youtubeSource)
+  // Unknown relation shape — leave mediaSource alone rather than wiping it.
+  if (!youtubeDocumentId) return
 
   const source =
     (await strapi.db.query('api::youtube-source.youtube-source').findOne({
@@ -114,6 +135,17 @@ async function linkYoutubeMediaSource(data: Record<string, unknown>) {
   }
 
   data.mediaSource = media.documentId || media.id
+}
+
+/** After save, propagate YouTube + mediaSource to draft and published versions. */
+async function ensureMediaSourceOnRow(row: Record<string, unknown> | undefined) {
+  const documentId = typeof row?.documentId === 'string' ? row.documentId : null
+  if (!documentId && !row?.id) return
+  const strapi = getStrapi()
+  const { linkPlaylistsToYoutubeMediaSources } = await import(
+    '../../../../utils/youtube-media-source'
+  )
+  await linkPlaylistsToYoutubeMediaSources(strapi, documentId)
 }
 
 export default {
@@ -164,5 +196,13 @@ export default {
     }
 
     await linkYoutubeMediaSource(data)
+  },
+
+  async afterCreate(event: { result?: Record<string, unknown> }) {
+    await ensureMediaSourceOnRow(event.result)
+  },
+
+  async afterUpdate(event: { result?: Record<string, unknown> }) {
+    await ensureMediaSourceOnRow(event.result)
   },
 }

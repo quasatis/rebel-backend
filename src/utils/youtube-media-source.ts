@@ -14,6 +14,7 @@ type YoutubeSourceLike = {
 }
 
 const MEDIA_UID = 'api::media-source.media-source'
+const PLAYLIST_UID = 'api::playlist.playlist'
 
 function buildPayload(source: YoutubeSourceLike) {
   const title = String(source.displayTitle || '').trim() || 'YouTube source'
@@ -95,4 +96,56 @@ export async function syncAllYoutubeSourcesToMediaSources(strapi: any) {
     if (result) synced += 1
   }
   return synced
+}
+
+/**
+ * Public site cannot read youtube-source rows, and draft/published are separate
+ * DB rows. Copy youtubeSource + matching mediaSource onto every version of each
+ * playlist document that has a YouTube source on at least one version.
+ */
+export async function linkPlaylistsToYoutubeMediaSources(
+  strapi: any,
+  documentId?: string | null,
+) {
+  const rows = await strapi.db.query(PLAYLIST_UID).findMany({
+    where: documentId ? { documentId } : undefined,
+    populate: ['youtubeSource', 'mediaSource'],
+  })
+
+  const byDocument = new Map<string, any[]>()
+  for (const row of rows || []) {
+    const key = row.documentId
+    if (!key) continue
+    const list = byDocument.get(key) || []
+    list.push(row)
+    byDocument.set(key, list)
+  }
+
+  let linked = 0
+  for (const versions of byDocument.values()) {
+    const withYoutube = versions.find((row) => row.youtubeSource)
+    if (!withYoutube?.youtubeSource) continue
+
+    const youtube = withYoutube.youtubeSource
+    const media = await syncMediaSourceFromYoutubeSource(strapi, youtube)
+    if (!media) continue
+
+    for (const row of versions) {
+      const needsYoutube = row.youtubeSource?.id !== youtube.id
+      const needsMedia =
+        row.mediaSource?.id !== media.id && row.mediaSource?.documentId !== media.documentId
+      if (!needsYoutube && !needsMedia) continue
+
+      const data: Record<string, unknown> = {}
+      if (needsYoutube) data.youtubeSource = youtube.id
+      if (needsMedia) data.mediaSource = media.id
+
+      await strapi.db.query(PLAYLIST_UID).update({
+        where: { id: row.id },
+        data,
+      })
+      linked += 1
+    }
+  }
+  return linked
 }

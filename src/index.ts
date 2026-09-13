@@ -921,12 +921,17 @@ export default {
     }
 
     try {
-      const { syncAllYoutubeSourcesToMediaSources } = await import(
-        './utils/youtube-media-source'
-      )
+      const {
+        syncAllYoutubeSourcesToMediaSources,
+        linkPlaylistsToYoutubeMediaSources,
+      } = await import('./utils/youtube-media-source')
       const synced = await syncAllYoutubeSourcesToMediaSources(strapi)
       if (synced > 0) {
         strapi.log.info(`Synced ${synced} YouTube source(s) into media sources.`)
+      }
+      const linked = await linkPlaylistsToYoutubeMediaSources(strapi)
+      if (linked > 0) {
+        strapi.log.info(`Linked ${linked} playlist(s) to YouTube media sources.`)
       }
     } catch (error) {
       strapi.log.warn(
