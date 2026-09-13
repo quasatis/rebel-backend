@@ -1,5 +1,7 @@
 /**
  * Auto-fill providerExternalKey = provider:externalId for uniqueness.
+ * Note: Strapi 5 REST create validates required fields before this runs;
+ * the media-source controller also sets the key for API creates/updates.
  */
 export default {
   async beforeCreate(event) {
