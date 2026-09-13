@@ -32,12 +32,19 @@ export default ({ env }) => {
       name: 'strapi::cors',
       config: {
         headers: '*',
-        origin: origins.length > 0 ? origins : ['http://localhost:3000', 'http://localhost:3001'],
+        origin: origins.length > 0 ? origins : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003'],
       },
     },
     'strapi::poweredBy',
     'strapi::query',
-    'strapi::body',
+    {
+      name: 'strapi::body',
+      config: {
+        formidable: {
+          maxFileSize: 2 * 1024 * 1024, // 2 MB
+        },
+      },
+    },
     'global::upload-folder',
     'strapi::session',
     'strapi::favicon',

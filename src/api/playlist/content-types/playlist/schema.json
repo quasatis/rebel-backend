@@ -32,7 +32,7 @@
       "target": "api::artist.artist"
     },
     "featured": { "type": "boolean", "default": false },
-    "displayOrder": { "type": "integer", "default": 0 },
+    "displayOrder": { "type": "integer", "default": 1, "min": 1 },
     "active": { "type": "boolean", "default": true }
   }
 }

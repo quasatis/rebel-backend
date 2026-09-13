@@ -3,6 +3,17 @@ import { errors } from '@strapi/utils'
 import { sanitizeMediaFolder } from '../../../utils/media-folders'
 
 const FILE_MODEL_UID = 'plugin::upload.file'
+const MAX_UPLOAD_BYTES = 2 * 1024 * 1024
+
+function assertWithinSizeLimit(files: unknown) {
+  const list = Array.isArray(files) ? files : files ? [files] : []
+  for (const file of list) {
+    const size = (file as { size?: number } | null)?.size
+    if (typeof size === 'number' && size > MAX_UPLOAD_BYTES) {
+      throw new errors.ValidationError('Image must be 2 MB or smaller')
+    }
+  }
+}
 
 export default ({ strapi }) => ({
   async upload(ctx) {
@@ -13,6 +24,7 @@ export default ({ strapi }) => ({
       throw new errors.ValidationError('Files are empty')
     }
 
+    assertWithinSizeLimit(files)
     const folder = sanitizeMediaFolder(body?.path)
     const uploadService = strapi.plugin('upload').service('upload')
     const apiUploadFolder = await strapi
