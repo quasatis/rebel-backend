@@ -1,0 +1,75 @@
+{
+  "kind": "collectionType",
+  "collectionName": "media_traffic_events",
+  "info": {
+    "singularName": "media-traffic-event",
+    "pluralName": "media-traffic-events",
+    "displayName": "Media Traffic Event",
+    "description": "First-party media engagement and outbound traffic events from the public site"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "eventType": {
+      "type": "enumeration",
+      "enum": [
+        "content_view",
+        "embed_impression",
+        "play",
+        "watch_progress",
+        "outbound_click"
+      ],
+      "required": true
+    },
+    "provider": {
+      "type": "enumeration",
+      "enum": ["youtube", "vimeo", "spotify"],
+      "required": true
+    },
+    "externalId": {
+      "type": "string",
+      "required": true
+    },
+    "mediaSourceDocumentId": {
+      "type": "string"
+    },
+    "channelId": {
+      "type": "string"
+    },
+    "channelTitle": {
+      "type": "string"
+    },
+    "contentType": {
+      "type": "string"
+    },
+    "contentDocumentId": {
+      "type": "string"
+    },
+    "contentSlug": {
+      "type": "string"
+    },
+    "pagePath": {
+      "type": "string"
+    },
+    "watchedSeconds": {
+      "type": "integer",
+      "min": 0
+    },
+    "progressPercent": {
+      "type": "integer",
+      "min": 0,
+      "max": 100
+    },
+    "sessionId": {
+      "type": "string"
+    },
+    "occurredAt": {
+      "type": "datetime"
+    },
+    "meta": {
+      "type": "json"
+    }
+  }
+}

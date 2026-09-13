@@ -11,14 +11,30 @@ type YoutubeSourceLike = {
   playlistId?: string | null
   videoId?: string | null
   channelId?: string | null
+  channelUrl?: string | null
 }
 
 const MEDIA_UID = 'api::media-source.media-source'
 const PLAYLIST_UID = 'api::playlist.playlist'
 
+function attributionMeta(source: YoutubeSourceLike) {
+  const channelId = String(source.channelId || '').trim() || null
+  const channelUrl =
+    String(source.channelUrl || '').trim() ||
+    (channelId ? `https://www.youtube.com/channel/${channelId}` : null)
+  return {
+    channelId,
+    channelUrl,
+    channelTitle: String(source.displayTitle || '').trim() || null,
+    youtubeSourceDocumentId: source.documentId || null,
+    youtubeSourceId: source.id ?? null,
+  }
+}
+
 function buildPayload(source: YoutubeSourceLike) {
   const title = String(source.displayTitle || '').trim() || 'YouTube source'
   const type = String(source.sourceType || '')
+  const attribution = attributionMeta(source)
 
   if (type === 'playlist' && source.playlistId) {
     const externalId = String(source.playlistId).trim()
@@ -30,8 +46,7 @@ function buildPayload(source: YoutubeSourceLike) {
       providerExternalKey: `youtube:playlist:${externalId}`,
       rawMeta: {
         type: 'playlist',
-        youtubeSourceDocumentId: source.documentId || null,
-        youtubeSourceId: source.id ?? null,
+        ...attribution,
       },
     }
   }
@@ -46,8 +61,7 @@ function buildPayload(source: YoutubeSourceLike) {
       providerExternalKey: `youtube:${externalId}`,
       rawMeta: {
         type: 'video',
-        youtubeSourceDocumentId: source.documentId || null,
-        youtubeSourceId: source.id ?? null,
+        ...attribution,
       },
     }
   }
@@ -88,6 +102,7 @@ export async function syncAllYoutubeSourcesToMediaSources(strapi: any) {
       'playlistId',
       'videoId',
       'channelId',
+      'channelUrl',
     ],
   })
   let synced = 0

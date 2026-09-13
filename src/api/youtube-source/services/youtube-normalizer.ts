@@ -1,5 +1,12 @@
 import type { YoutubeListItem } from './youtube'
 
+export type YoutubeAttribution = {
+  channelId?: string | null
+  channelUrl?: string | null
+  youtubeSourceDocumentId?: string | null
+  youtubeSourceId?: number | string | null
+}
+
 export type NormalizedYoutubeVideo = {
   youtubeVideoId: string
   title: string
@@ -22,8 +29,12 @@ export type NormalizedYoutubeVideo = {
 }
 
 export default () => ({
-  normalize(item: YoutubeListItem): NormalizedYoutubeVideo {
+  normalize(item: YoutubeListItem, attribution: YoutubeAttribution = {}): NormalizedYoutubeVideo {
     const externalUrl = `https://www.youtube.com/watch?v=${item.id}`
+    const channelId = String(attribution.channelId || '').trim() || null
+    const channelUrl =
+      String(attribution.channelUrl || '').trim() ||
+      (channelId ? `https://www.youtube.com/channel/${channelId}` : null)
     return {
       youtubeVideoId: item.id,
       title: item.title,
@@ -42,8 +53,13 @@ export default () => ({
         durationSeconds: item.durationSeconds,
         providerExternalKey: `youtube:${item.id}`,
         rawMeta: {
+          type: 'video',
           channelTitle: item.channelTitle,
+          channelId,
+          channelUrl,
           publishedAt: item.publishedAt,
+          youtubeSourceDocumentId: attribution.youtubeSourceDocumentId || null,
+          youtubeSourceId: attribution.youtubeSourceId ?? null,
         },
       },
     }

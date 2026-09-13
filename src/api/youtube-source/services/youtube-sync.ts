@@ -161,8 +161,15 @@ export default ({ strapi }) => ({
       mediaSourceId: number
     }> = []
 
+    const attribution = {
+      channelId: source.channelId || null,
+      channelUrl: source.channelUrl || null,
+      youtubeSourceDocumentId: source.documentId || null,
+      youtubeSourceId: source.id ?? null,
+    }
+
     for (const raw of items) {
-      const normalized = normalizer.normalize(raw)
+      const normalized = normalizer.normalize(raw, attribution)
       const existing = await strapi.db.query('api::synced-video.synced-video').findOne({
         where: { youtubeVideoId: normalized.youtubeVideoId },
       })
