@@ -26,6 +26,7 @@ const CONTENT_UIDS = [
   'api::about-page.about-page',
   'api::newsletter-config.newsletter-config',
   'api::newsletter-subscription.newsletter-subscription',
+  'api::media-traffic-event.media-traffic-event',
   'api::synced-video.synced-video',
   'api::youtube-source.youtube-source',
 ]
@@ -62,6 +63,7 @@ async function setPublicPermissions(strapi: Core.Strapi) {
   // MediaSource stays public so FO can populate embeds on published content.
   const publicDenied = new Set([
     'api::newsletter-subscription.newsletter-subscription',
+    'api::media-traffic-event.media-traffic-event',
     'api::youtube-source.youtube-source',
     'api::synced-video.synced-video',
   ])
@@ -76,6 +78,7 @@ async function setPublicPermissions(strapi: Core.Strapi) {
   for (const uid of [
     'api::synced-video.synced-video',
     'api::youtube-source.youtube-source',
+    'api::media-traffic-event.media-traffic-event',
   ]) {
     for (const action of ['find', 'findOne', 'create', 'update', 'delete']) {
       await revokePermission(strapi, publicRole.id, `${uid}.${action}`)
@@ -87,6 +90,13 @@ async function setPublicPermissions(strapi: Core.Strapi) {
     publicRole.id,
     'api::newsletter-subscription.newsletter-subscription.create',
   )
+  await ensurePermission(
+    strapi,
+    publicRole.id,
+    'api::media-traffic-event.media-traffic-event.create',
+  )
+  // Playlist detail may list synced YouTube videos without exposing synced-video find.
+  await ensurePermission(strapi, publicRole.id, 'api::playlist.playlist.videos')
   await ensurePermission(strapi, publicRole.id, 'api::search.search.search')
 }
 
@@ -105,6 +115,7 @@ async function setRoleContentPermissions(
   }
 
   await ensurePermission(strapi, roleId, 'api::search.search.search')
+  await ensurePermission(strapi, roleId, 'api::analytics.analytics.channelTraffic')
   await ensurePermission(strapi, roleId, 'plugin::upload.content-api.find')
   await ensurePermission(strapi, roleId, 'plugin::upload.content-api.findOne')
   await ensurePermission(strapi, roleId, 'plugin::users-permissions.user.me')
