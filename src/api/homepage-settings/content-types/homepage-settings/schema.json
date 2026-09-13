@@ -24,6 +24,10 @@
     "footerTagline": {
       "type": "text",
       "default": "The platform for black creatives by black creatives. Music, Culture, Community."
-    }
+    },
+    "socialInstagramUrl": { "type": "string" },
+    "socialTiktokUrl": { "type": "string" },
+    "socialYoutubeUrl": { "type": "string" },
+    "socialXUrl": { "type": "string" }
   }
 }

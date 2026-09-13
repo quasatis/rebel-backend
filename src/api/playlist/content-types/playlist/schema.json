@@ -21,6 +21,11 @@
       "relation": "manyToOne",
       "target": "api::media-source.media-source"
     },
+    "youtubeSource": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::youtube-source.youtube-source"
+    },
     "spotifySource": {
       "type": "relation",
       "relation": "manyToOne",

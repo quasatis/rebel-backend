@@ -1,4 +1,5 @@
 import { errors } from '@strapi/utils'
+import { syncMediaSourceFromYoutubeSource } from '../../../../utils/youtube-media-source'
 
 const UID = 'api::playlist.playlist'
 
@@ -67,6 +68,54 @@ function normalizeOrder(value: unknown): number | null {
   return Math.trunc(n)
 }
 
+function relationDocumentId(value: unknown): string | null {
+  if (value == null || value === '') return null
+  if (typeof value === 'string') return value
+  if (typeof value === 'number') return String(value)
+  if (typeof value === 'object' && value && 'documentId' in value) {
+    return String((value as { documentId: string }).documentId || '') || null
+  }
+  if (typeof value === 'object' && value && 'id' in value) {
+    return String((value as { id: string | number }).id || '') || null
+  }
+  return null
+}
+
+/**
+ * When an editor picks a YouTube Source, also attach the matching Media Source
+ * so the public site can embed it.
+ */
+async function linkYoutubeMediaSource(data: Record<string, unknown>) {
+  if (!('youtubeSource' in data)) return
+  const strapi = getStrapi()
+  const youtubeDocumentId = relationDocumentId(data.youtubeSource)
+  if (!youtubeDocumentId) {
+    data.mediaSource = null
+    return
+  }
+
+  const source =
+    (await strapi.db.query('api::youtube-source.youtube-source').findOne({
+      where: { documentId: youtubeDocumentId },
+    })) ||
+    (await strapi.db.query('api::youtube-source.youtube-source').findOne({
+      where: { id: youtubeDocumentId },
+    }))
+
+  if (!source) {
+    throw new errors.ValidationError('Selected YouTube source was not found.')
+  }
+
+  const media = await syncMediaSourceFromYoutubeSource(strapi, source)
+  if (!media) {
+    throw new errors.ValidationError(
+      'That YouTube source needs a Playlist ID or Video ID before it can be linked to a playlist.',
+    )
+  }
+
+  data.mediaSource = media.documentId || media.id
+}
+
 export default {
   async beforeCreate(event: {
     params: { data?: Record<string, unknown>; where?: Record<string, unknown> }
@@ -88,26 +137,32 @@ export default {
         `Display order ${order} is already used by another playlist.`,
       )
     }
+
+    await linkYoutubeMediaSource(data)
   },
 
   async beforeUpdate(event: {
     params: { data?: Record<string, unknown>; where?: Record<string, unknown> }
   }) {
     const data = event.params.data
-    if (!data || !('displayOrder' in data)) return
+    if (!data) return
 
-    const order = normalizeOrder(data.displayOrder)
-    if (order == null || order < 1) {
-      throw new errors.ValidationError('Display order must be a positive integer.')
-    }
-    data.displayOrder = order
+    if ('displayOrder' in data) {
+      const order = normalizeOrder(data.displayOrder)
+      if (order == null || order < 1) {
+        throw new errors.ValidationError('Display order must be a positive integer.')
+      }
+      data.displayOrder = order
 
-    const documentId = await resolveDocumentId(event.params)
-    const clash = await findOrderClash(order, documentId)
-    if (clash) {
-      throw new errors.ValidationError(
-        `Display order ${order} is already used by another playlist.`,
-      )
+      const documentId = await resolveDocumentId(event.params)
+      const clash = await findOrderClash(order, documentId)
+      if (clash) {
+        throw new errors.ValidationError(
+          `Display order ${order} is already used by another playlist.`,
+        )
+      }
     }
+
+    await linkYoutubeMediaSource(data)
   },
 }

@@ -909,15 +909,31 @@ export default {
             await seedStore.set({ key: 'demo_content', value: true })
           }
         } else {
-          await seedDemoContent(strapi)
-          await seedStore.set({ key: 'demo_content', value: true })
-          strapi.log.info('Demo content seed completed (forced).')
-        }
+      await seedDemoContent(strapi)
+      await seedStore.set({ key: 'demo_content', value: true })
+      strapi.log.info('Demo content seed completed (forced).')
+    }
       } catch (error) {
         strapi.log.error(
           `Demo seed failed: ${error instanceof Error ? error.message : 'unknown'}`,
         )
       }
+    }
+
+    try {
+      const { syncAllYoutubeSourcesToMediaSources } = await import(
+        './utils/youtube-media-source'
+      )
+      const synced = await syncAllYoutubeSourcesToMediaSources(strapi)
+      if (synced > 0) {
+        strapi.log.info(`Synced ${synced} YouTube source(s) into media sources.`)
+      }
+    } catch (error) {
+      strapi.log.warn(
+        `YouTube → media source sync skipped: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      )
     }
 
     strapi.db.lifecycles.subscribe({
