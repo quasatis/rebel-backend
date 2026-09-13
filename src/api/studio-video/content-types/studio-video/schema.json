@@ -29,6 +29,11 @@
       "target": "api::category.category"
     },
     "featured": { "type": "boolean", "default": false },
+    "genre": {
+      "type": "enumeration",
+      "enum": ["music", "film", "documentary", "interview", "live"]
+    },
+    "isOriginal": { "type": "boolean", "default": false },
     "visibility": {
       "type": "enumeration",
       "enum": ["public", "unlisted", "private"],
@@ -40,6 +45,16 @@
     {
       "name": "studio_videos_featured_idx",
       "columns": ["featured"],
+      "type": null
+    },
+    {
+      "name": "studio_videos_genre_idx",
+      "columns": ["genre"],
+      "type": null
+    },
+    {
+      "name": "studio_videos_is_original_idx",
+      "columns": ["is_original"],
       "type": null
     }
   ]

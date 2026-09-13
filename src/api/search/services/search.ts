@@ -203,7 +203,14 @@ export default ({ strapi }: { strapi: any }) => ({
         strapi
           .documents('api::studio-video.studio-video')
           .findMany({
-            filters: { title: contains, visibility: 'public' },
+            filters: {
+              visibility: 'public',
+              $or: [
+                { title: contains },
+                { description: contains },
+                { genre: contains },
+              ],
+            },
             status: 'published',
             limit: gatherLimit,
             populate: {
@@ -221,6 +228,7 @@ export default ({ strapi }: { strapi: any }) => ({
                 slug: String(row.slug),
                 excerpt: row.description || null,
                 imageUrl: mediaThumb(row),
+                category: row.genre ? String(row.genre) : null,
                 publishedAt: row.releaseDate || null,
               }),
             )
