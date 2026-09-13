@@ -15,6 +15,7 @@ export type NormalizedYoutubeVideo = {
   publishedAt: string
   channelTitle: string
   durationSeconds?: number
+  playlistPosition?: number
   externalUrl: string
   mediaSource: {
     provider: 'youtube'
@@ -43,6 +44,7 @@ export default () => ({
       publishedAt: item.publishedAt,
       channelTitle: item.channelTitle,
       durationSeconds: item.durationSeconds,
+      playlistPosition: item.playlistPosition,
       externalUrl,
       mediaSource: {
         provider: 'youtube',
@@ -58,6 +60,7 @@ export default () => ({
           channelId,
           channelUrl,
           publishedAt: item.publishedAt,
+          playlistPosition: item.playlistPosition ?? null,
           youtubeSourceDocumentId: attribution.youtubeSourceDocumentId || null,
           youtubeSourceId: attribution.youtubeSourceId ?? null,
         },

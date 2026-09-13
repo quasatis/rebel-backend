@@ -3,6 +3,12 @@
  * embed relations) can pick the same catalogues created under Shows → YouTube Sources.
  */
 
+import {
+  normalizeYoutubeChannelId,
+  normalizeYoutubePlaylistId,
+  normalizeYoutubeVideoId,
+} from './youtube-ids'
+
 type YoutubeSourceLike = {
   id?: number | string
   documentId?: string
@@ -18,7 +24,7 @@ const MEDIA_UID = 'api::media-source.media-source'
 const PLAYLIST_UID = 'api::playlist.playlist'
 
 function attributionMeta(source: YoutubeSourceLike) {
-  const channelId = String(source.channelId || '').trim() || null
+  const channelId = normalizeYoutubeChannelId(source.channelId) || null
   const channelUrl =
     String(source.channelUrl || '').trim() ||
     (channelId ? `https://www.youtube.com/channel/${channelId}` : null)
@@ -37,7 +43,8 @@ function buildPayload(source: YoutubeSourceLike) {
   const attribution = attributionMeta(source)
 
   if (type === 'playlist' && source.playlistId) {
-    const externalId = String(source.playlistId).trim()
+    const externalId = normalizeYoutubePlaylistId(source.playlistId)
+    if (!externalId) return null
     return {
       provider: 'youtube' as const,
       externalId,
@@ -52,7 +59,8 @@ function buildPayload(source: YoutubeSourceLike) {
   }
 
   if (type === 'video' && source.videoId) {
-    const externalId = String(source.videoId).trim()
+    const externalId = normalizeYoutubeVideoId(source.videoId)
+    if (!externalId) return null
     return {
       provider: 'youtube' as const,
       externalId,

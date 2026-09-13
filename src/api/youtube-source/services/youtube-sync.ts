@@ -1,3 +1,10 @@
+import {
+  normalizeYoutubeChannelId,
+  normalizeYoutubePlaylistId,
+  normalizeYoutubeUsername,
+  normalizeYoutubeVideoId,
+} from '../../../utils/youtube-ids'
+
 function slugify(input: string): string {
   const base = input
     .toLowerCase()
@@ -116,6 +123,31 @@ export default ({ strapi }) => ({
     const youtube = strapi.service('api::youtube-source.youtube')
     const normalizer = strapi.service('api::youtube-source.youtube-normalizer')
 
+    // Persist cleaned IDs when editors pasted full YouTube URLs.
+    const cleaned = {
+      playlistId: source.playlistId
+        ? normalizeYoutubePlaylistId(source.playlistId)
+        : source.playlistId,
+      videoId: source.videoId ? normalizeYoutubeVideoId(source.videoId) : source.videoId,
+      channelId: source.channelId
+        ? normalizeYoutubeChannelId(source.channelId)
+        : source.channelId,
+      username: source.username ? normalizeYoutubeUsername(source.username) : source.username,
+    }
+    const idPatch: Record<string, string | null> = {}
+    for (const key of ['playlistId', 'videoId', 'channelId', 'username'] as const) {
+      if (cleaned[key] && cleaned[key] !== source[key]) {
+        idPatch[key] = cleaned[key]
+        source[key] = cleaned[key]
+      }
+    }
+    if (Object.keys(idPatch).length) {
+      await strapi.db.query('api::youtube-source.youtube-source').update({
+        where: { id: source.id },
+        data: idPatch,
+      })
+    }
+
     let items = []
     try {
       if (source.sourceType === 'playlist' && source.playlistId) {
@@ -209,6 +241,8 @@ export default ({ strapi }) => ({
         description: normalized.description,
         thumbnailUrl: normalized.thumbnailUrl,
         publishedAt: normalized.publishedAt,
+        playlistPosition:
+          typeof normalized.playlistPosition === 'number' ? normalized.playlistPosition : null,
         channelTitle: normalized.channelTitle,
         durationSeconds: normalized.durationSeconds,
         externalUrl: normalized.externalUrl,

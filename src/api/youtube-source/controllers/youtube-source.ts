@@ -10,9 +10,15 @@ export default factories.createCoreController('api::youtube-source.youtube-sourc
       const result = await strapi.service('api::youtube-source.youtube-sync').syncSource(documentId)
       ctx.body = { data: result }
     } catch (error) {
-      strapi.log.error(
-        `Manual YouTube sync failed: ${error instanceof Error ? error.message : 'unknown'}`,
-      )
+      const message = error instanceof Error ? error.message : 'unknown'
+      strapi.log.error(`Manual YouTube sync failed: ${message}`)
+      if (
+        /rejected|empty|not found|missing required|Invalid Value|YouTube API error 400/i.test(
+          message,
+        )
+      ) {
+        return ctx.badRequest(message)
+      }
       return ctx.internalServerError('Synchronization failed')
     }
   },

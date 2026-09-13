@@ -13,6 +13,7 @@
     "description": { "type": "text" },
     "thumbnailUrl": { "type": "text" },
     "publishedAt": { "type": "datetime" },
+    "playlistPosition": { "type": "integer" },
     "channelTitle": { "type": "string" },
     "durationSeconds": { "type": "integer" },
     "externalUrl": { "type": "string", "required": true },

@@ -3,6 +3,13 @@
  * Includes light quota batching + exponential backoff on 403/429.
  */
 
+import {
+  normalizeYoutubeChannelId,
+  normalizeYoutubePlaylistId,
+  normalizeYoutubeUsername,
+  normalizeYoutubeVideoId,
+} from '../../../utils/youtube-ids'
+
 export type YoutubeListItem = {
   id: string
   title: string
@@ -11,6 +18,8 @@ export type YoutubeListItem = {
   publishedAt: string
   channelTitle: string
   durationSeconds?: number
+  /** 0-based index in the YouTube playlist (snippet.position). */
+  playlistPosition?: number
 }
 
 function getApiKey(): string {
@@ -105,6 +114,11 @@ async function enrichVideoDetails(items: YoutubeListItem[]): Promise<YoutubeList
 
 export default () => ({
   async fetchPlaylistVideos(playlistId: string): Promise<YoutubeListItem[]> {
+    const id = normalizeYoutubePlaylistId(playlistId)
+    if (!id) {
+      throw new Error('Playlist ID is empty. Paste a playlist ID (PL…) or playlist URL.')
+    }
+
     const items: YoutubeListItem[] = []
     let pageToken = ''
     do {
@@ -116,6 +130,7 @@ export default () => ({
             description?: string
             publishedAt?: string
             channelTitle?: string
+            position?: number
             resourceId?: { videoId?: string }
             thumbnails?: { high?: { url?: string }; medium?: { url?: string } }
           }
@@ -126,9 +141,17 @@ export default () => ({
         }>
       }>('playlistItems', {
         part: 'snippet,contentDetails',
-        playlistId,
+        playlistId: id,
         maxResults: '50',
         pageToken,
+      }).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        if (message.includes('400') || /invalid value/i.test(message)) {
+          throw new Error(
+            `YouTube rejected playlist ID “${id}”. Use a playlist ID (starts with PL…) or a playlist URL — not a video ID.`,
+          )
+        }
+        throw error
       })
       for (const item of page.items || []) {
         const videoId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId
@@ -147,6 +170,8 @@ export default () => ({
             item.snippet?.publishedAt ||
             new Date().toISOString(),
           channelTitle: item.snippet?.channelTitle || '',
+          playlistPosition:
+            typeof item.snippet?.position === 'number' ? item.snippet.position : items.length,
         })
       }
       pageToken = page.nextPageToken || ''
@@ -155,12 +180,64 @@ export default () => ({
     return enrichVideoDetails(items)
   },
 
+  /** Lightweight playlist order (video id + position) without duration enrichment. */
+  async fetchPlaylistOrder(
+    playlistId: string,
+  ): Promise<Array<{ id: string; position: number }>> {
+    const id = normalizeYoutubePlaylistId(playlistId)
+    if (!id) return []
+
+    const order: Array<{ id: string; position: number }> = []
+    let pageToken = ''
+    do {
+      const page = await youtubeGet<{
+        nextPageToken?: string
+        items?: Array<{
+          snippet?: {
+            position?: number
+            resourceId?: { videoId?: string }
+          }
+          contentDetails?: { videoId?: string }
+        }>
+      }>('playlistItems', {
+        part: 'snippet,contentDetails',
+        playlistId: id,
+        maxResults: '50',
+        pageToken,
+      })
+      for (const item of page.items || []) {
+        const videoId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId
+        if (!videoId) continue
+        order.push({
+          id: videoId,
+          position:
+            typeof item.snippet?.position === 'number' ? item.snippet.position : order.length,
+        })
+      }
+      pageToken = page.nextPageToken || ''
+      if (pageToken) await sleep(150)
+    } while (pageToken)
+    return order
+  },
+
   async fetchChannelUploads(channelId: string): Promise<YoutubeListItem[]> {
+    const id = normalizeYoutubeChannelId(channelId)
+    if (!id) {
+      throw new Error('Channel ID is empty. Paste a channel ID (UC…) or /channel/ URL.')
+    }
     const channel = await youtubeGet<{
       items?: Array<{ contentDetails?: { relatedPlaylists?: { uploads?: string } } }>
     }>('channels', {
       part: 'contentDetails',
-      id: channelId,
+      id,
+    }).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error)
+      if (message.includes('400') || /invalid value/i.test(message)) {
+        throw new Error(
+          `YouTube rejected channel ID “${id}”. Use a channel ID (starts with UC…) or a /channel/UC… URL.`,
+        )
+      }
+      throw error
     })
     const uploads = channel.items?.[0]?.contentDetails?.relatedPlaylists?.uploads
     if (!uploads) return []
@@ -171,7 +248,7 @@ export default () => ({
    * Resolve a YouTube @handle or legacy username to a channel ID.
    */
   async resolveChannelIdFromUsername(username: string): Promise<string> {
-    const handle = username.replace(/^@/, '').trim()
+    const handle = normalizeYoutubeUsername(username)
     if (!handle) {
       throw new Error('YouTube username/handle is empty')
     }
@@ -210,6 +287,10 @@ export default () => ({
   },
 
   async fetchVideo(videoId: string): Promise<YoutubeListItem | null> {
+    const id = normalizeYoutubeVideoId(videoId)
+    if (!id) {
+      throw new Error('Video ID is empty. Paste a video ID or watch URL.')
+    }
     const data = await youtubeGet<{
       items?: Array<{
         id?: string
@@ -224,7 +305,15 @@ export default () => ({
       }>
     }>('videos', {
       part: 'snippet,contentDetails',
-      id: videoId,
+      id,
+    }).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error)
+      if (message.includes('400') || /invalid value/i.test(message)) {
+        throw new Error(
+          `YouTube rejected video ID “${id}”. Use an 11-character video ID or a youtube.com/watch URL.`,
+        )
+      }
+      throw error
     })
     const item = data.items?.[0]
     if (!item?.id) return null
@@ -239,6 +328,7 @@ export default () => ({
       publishedAt: item.snippet?.publishedAt || new Date().toISOString(),
       channelTitle: item.snippet?.channelTitle || '',
       durationSeconds: parseDuration(item.contentDetails?.duration),
+      playlistPosition: 0,
     }
   },
 })
