@@ -101,13 +101,42 @@ function isRelationCleared(value: unknown): boolean {
 /**
  * When an editor picks a YouTube Source, also attach the matching Media Source
  * so the public site can embed it (youtube-source is not public).
+ * Vimeo uses the separate vimeoSource relation — do not store it on mediaSource.
  */
+async function moveVimeoOffSharedMediaSource(data: Record<string, unknown>) {
+  if (!('mediaSource' in data) || isRelationCleared(data.mediaSource)) return
+  // If editor already set vimeoSource, leave mediaSource handling to YouTube logic.
+  if ('vimeoSource' in data && !isRelationCleared(data.vimeoSource)) return
+
+  const mediaDocumentId = relationDocumentId(data.mediaSource)
+  if (!mediaDocumentId) return
+
+  const strapi = getStrapi()
+  const media =
+    (await strapi.db.query('api::media-source.media-source').findOne({
+      where: { documentId: mediaDocumentId },
+    })) ||
+    (await strapi.db.query('api::media-source.media-source').findOne({
+      where: { id: mediaDocumentId },
+    }))
+
+  if (String(media?.provider || '').toLowerCase() !== 'vimeo') return
+
+  data.vimeoSource = media.documentId || media.id
+  data.mediaSource = null
+}
+
 async function linkYoutubeMediaSource(data: Record<string, unknown>) {
+  await moveVimeoOffSharedMediaSource(data)
+
   if (!('youtubeSource' in data)) return
   const strapi = getStrapi()
 
   if (isRelationCleared(data.youtubeSource)) {
-    data.mediaSource = null
+    // Clear only the YouTube auto-linked mediaSource slot (not vimeoSource).
+    if (!('mediaSource' in data) || isRelationCleared(data.mediaSource)) {
+      data.mediaSource = null
+    }
     return
   }
 

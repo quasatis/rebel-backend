@@ -952,6 +952,22 @@ export default {
       )
     }
 
+    try {
+      const { migratePlaylistVimeoSources } = await import('./utils/migrate-playlist-vimeo')
+      const result = await migratePlaylistVimeoSources(strapi)
+      if (result.moved > 0) {
+        strapi.log.info(
+          `Migrated ${result.moved} playlist Vimeo link(s); published ${result.published} document(s).`,
+        )
+      }
+    } catch (error) {
+      strapi.log.warn(
+        `Playlist Vimeo migration skipped: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      )
+    }
+
     strapi.db.lifecycles.subscribe({
       models: [
         'api::article.article',

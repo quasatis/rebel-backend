@@ -155,8 +155,13 @@ export async function linkPlaylistsToYoutubeMediaSources(
 
     for (const row of versions) {
       const needsYoutube = row.youtubeSource?.id !== youtube.id
+      const mediaProvider = String(row.mediaSource?.provider || '').toLowerCase()
+      // Preserve non-YouTube mediaSource (e.g. Vimeo) linked from the playlist form.
+      const canReplaceMedia = !row.mediaSource || mediaProvider === 'youtube' || !mediaProvider
       const needsMedia =
-        row.mediaSource?.id !== media.id && row.mediaSource?.documentId !== media.documentId
+        canReplaceMedia &&
+        row.mediaSource?.id !== media.id &&
+        row.mediaSource?.documentId !== media.documentId
       if (!needsYoutube && !needsMedia) continue
 
       const data: Record<string, unknown> = {}
