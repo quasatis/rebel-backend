@@ -5,6 +5,14 @@ import {
   normalizeYoutubeVideoId,
 } from '../../../utils/youtube-ids'
 
+function formatSyncFailure(error: unknown): string {
+  const raw = error instanceof Error ? error.message : 'sync failed'
+  if (/fetch failed/i.test(raw) || /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|network/i.test(raw)) {
+    return 'Could not reach YouTube API (network/DNS). Check YOUTUBE_API_KEY and outbound access from Strapi.'
+  }
+  return raw
+}
+
 function slugify(input: string): string {
   const base = input
     .toLowerCase()
@@ -171,10 +179,11 @@ export default ({ strapi }) => ({
         throw new Error('Source is missing required identifiers')
       }
     } catch (error) {
+      const message = formatSyncFailure(error)
       await strapi.db.query('api::youtube-source.youtube-source').update({
         where: { id: source.id },
         data: {
-          lastSyncStatus: `error: ${error instanceof Error ? error.message : 'sync failed'}`,
+          lastSyncStatus: `error: ${message}`,
           lastSyncedAt: new Date().toISOString(),
         },
       })

@@ -23,6 +23,7 @@ const CONTENT_UIDS = [
   'api::media-source.media-source',
   'api::homepage-feature.homepage-feature',
   'api::homepage-settings.homepage-settings',
+  'api::launch-settings.launch-settings',
   'api::about-page.about-page',
   'api::newsletter-config.newsletter-config',
   'api::newsletter-subscription.newsletter-subscription',
@@ -839,6 +840,20 @@ async function seedDemoContent(strapi: Core.Strapi) {
     })
   }
 
+  const launchSettings = await strapi
+    .documents('api::launch-settings.launch-settings')
+    .findMany({ limit: 1 })
+  if (!launchSettings.length) {
+    await strapi.documents('api::launch-settings.launch-settings').create({
+      data: {
+        enabled: false,
+        headline: 'We launch soon',
+        subheadline: 'REBEL AFRIQUE is almost here — music, culture, and community.',
+        showNewsletter: true,
+      },
+    })
+  }
+
   strapi.log.info('Demo content seed complete')
 }
 
@@ -884,6 +899,29 @@ export default {
   async bootstrap({ strapi }: { strapi: Core.Strapi }) {
     await setPublicPermissions(strapi)
     await setAuthenticatedPermissions(strapi)
+
+    try {
+      const existingLaunch = await strapi
+        .documents('api::launch-settings.launch-settings')
+        .findMany({ limit: 1 })
+      if (!existingLaunch.length) {
+        await strapi.documents('api::launch-settings.launch-settings').create({
+          data: {
+            enabled: false,
+            headline: 'We launch soon',
+            subheadline: 'REBEL AFRIQUE is almost here — music, culture, and community.',
+            showNewsletter: true,
+          },
+        })
+        strapi.log.info('Created default launch-settings.')
+      }
+    } catch (error) {
+      strapi.log.warn(
+        `Launch settings ensure skipped: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      )
+    }
 
     try {
       await seedBackofficeUsers(strapi)
@@ -981,6 +1019,7 @@ export default {
         'api::playlist.playlist',
         'api::homepage-feature.homepage-feature',
         'api::homepage-settings.homepage-settings',
+        'api::launch-settings.launch-settings',
         'api::about-page.about-page',
         'api::newsletter-config.newsletter-config',
       ],

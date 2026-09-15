@@ -1,0 +1,36 @@
+{
+  "kind": "singleType",
+  "collectionName": "launch_settings",
+  "info": {
+    "singularName": "launch-settings",
+    "pluralName": "launch-settings-entries",
+    "displayName": "Launch Settings"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "enabled": {
+      "type": "boolean",
+      "default": false
+    },
+    "launchAt": {
+      "type": "datetime"
+    },
+    "headline": {
+      "type": "string",
+      "default": "We launch soon"
+    },
+    "subheadline": {
+      "type": "text",
+      "default": "REBEL AFRIQUE is almost here — music, culture, and community."
+    },
+    "showNewsletter": {
+      "type": "boolean",
+      "default": true
+    },
+    "previewSecret": {
+      "type": "string"
+    }
+  }
+}
