@@ -39,6 +39,14 @@
       "allowedTypes": ["images"]
     },
     "canonicalUrl": { "type": "string" },
+    "source": {
+      "type": "string",
+      "description": "News outlet or wire attribution shown under the byline"
+    },
+    "sourceUrl": {
+      "type": "string",
+      "description": "Optional link for the news source"
+    },
     "author": {
       "type": "relation",
       "relation": "manyToOne",
