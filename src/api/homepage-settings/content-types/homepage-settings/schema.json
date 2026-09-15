@@ -10,6 +10,10 @@
   "attributes": {
     "latestTitle": { "type": "string", "default": "Latest from Rebel" },
     "latestEnabled": { "type": "boolean", "default": true },
+    "latestArticleDocumentIds": {
+      "type": "json",
+      "default": []
+    },
     "musicTitle": { "type": "string", "default": "Music" },
     "musicEnabled": { "type": "boolean", "default": true },
     "showsTitle": { "type": "string", "default": "Shows" },
