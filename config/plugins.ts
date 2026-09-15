@@ -20,7 +20,7 @@ export default ({ env }) => ({
   },
   upload: {
     config: {
-      sizeLimit: 2 * 1024 * 1024, // 2 MB
+      sizeLimit: 10 * 1024 * 1024, // 10 MB
       provider: 'cloudinary',
       providerOptions: {
         cloud_name: env('CLOUDINARY_NAME'),
