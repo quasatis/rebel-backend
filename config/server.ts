@@ -27,6 +27,21 @@ export default ({ env }) => ({
           rule: env('YOUTUBE_SYNC_CRON', '0 * * * *'),
         },
       },
+      scheduledPublish: {
+        task: async ({ strapi }) => {
+          try {
+            const { publishDueDocumentsAll } = await import('../src/utils/scheduled-publish')
+            await publishDueDocumentsAll(strapi)
+          } catch (error) {
+            strapi.log.error(
+              `Scheduled publish run failed: ${error instanceof Error ? error.message : String(error)}`,
+            )
+          }
+        },
+        options: {
+          rule: env('SCHEDULED_PUBLISH_CRON', '* * * * *'),
+        },
+      },
     },
   },
 })

@@ -30,6 +30,10 @@
     },
     "featured": { "type": "boolean", "default": false },
     "readingTime": { "type": "integer", "min": 1 },
+    "scheduledPublishAt": {
+      "type": "datetime",
+      "description": "When set on a draft, a cron job publishes the article at this time"
+    },
     "seoTitle": { "type": "string" },
     "seoDescription": { "type": "text" },
     "socialImage": {

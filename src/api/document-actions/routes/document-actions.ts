@@ -14,5 +14,14 @@ export default {
         middlewares: [],
       },
     },
+    {
+      method: 'POST',
+      path: '/document-actions/:collection/:documentId/publish-date',
+      handler: 'document-actions.setPublishDate',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
   ],
 }

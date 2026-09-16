@@ -42,6 +42,149 @@ async function uniqueEpisodeSlug(strapi: any, base: string, excludeDocumentId?: 
   }
 }
 
+/**
+ * Fill null episodeNumber values for a show. Never overwrites existing numbers.
+ * Order: playlistPosition (via synced-video) ascending when present, else publishedAt asc.
+ */
+async function assignMissingEpisodeNumbers(strapi: any, showId: number): Promise<number> {
+  if (!showId) return 0
+
+  const episodes = await strapi.db.query('api::show-episode.show-episode').findMany({
+    where: { show: showId },
+    limit: 5000,
+  })
+
+  if (!episodes?.length) return 0
+
+  const numbered = episodes.filter(
+    (ep: { episodeNumber?: number | null }) =>
+      typeof ep.episodeNumber === 'number' && Number.isFinite(ep.episodeNumber),
+  )
+  const missing = episodes.filter(
+    (ep: { episodeNumber?: number | null }) =>
+      ep.episodeNumber == null || !Number.isFinite(ep.episodeNumber),
+  )
+
+  if (!missing.length) return 0
+
+  let next =
+    numbered.reduce(
+      (max: number, ep: { episodeNumber: number }) => Math.max(max, ep.episodeNumber),
+      0,
+    ) + 1
+
+  const mediaSourceIdSet = new Set<number>()
+  for (const ep of missing as Array<{ mediaSource?: number | { id?: number } | null }>) {
+    if (typeof ep.mediaSource === 'number') mediaSourceIdSet.add(ep.mediaSource)
+    else if (ep.mediaSource && typeof ep.mediaSource === 'object' && typeof ep.mediaSource.id === 'number') {
+      mediaSourceIdSet.add(ep.mediaSource.id)
+    }
+  }
+  const mediaSourceIds = Array.from(mediaSourceIdSet)
+
+  const positionByMediaSource = new Map<number, number>()
+  if (mediaSourceIds.length) {
+    const synced = await strapi.db.query('api::synced-video.synced-video').findMany({
+      where: { mediaSource: { $in: mediaSourceIds } },
+      limit: mediaSourceIds.length,
+    })
+    for (const row of synced || []) {
+      const msId =
+        typeof row.mediaSource === 'number'
+          ? row.mediaSource
+          : row.mediaSource?.id
+      if (
+        typeof msId === 'number' &&
+        typeof row.playlistPosition === 'number' &&
+        Number.isFinite(row.playlistPosition)
+      ) {
+        positionByMediaSource.set(msId, row.playlistPosition)
+      }
+    }
+  }
+
+  type Sortable = {
+    id: number
+    mediaSourceId: number | null
+    playlistPosition: number | null
+    publishedAtMs: number
+  }
+
+  const sortable: Sortable[] = missing.map(
+    (ep: {
+      id: number
+      mediaSource?: number | { id?: number } | null
+      publishedAt?: string | Date | null
+      createdAt?: string | Date | null
+    }) => {
+      const mediaSourceId =
+        typeof ep.mediaSource === 'number'
+          ? ep.mediaSource
+          : ep.mediaSource && typeof ep.mediaSource === 'object' && ep.mediaSource.id
+            ? ep.mediaSource.id
+            : null
+      const playlistPosition =
+        mediaSourceId != null && positionByMediaSource.has(mediaSourceId)
+          ? (positionByMediaSource.get(mediaSourceId) as number)
+          : null
+      const publishedRaw = ep.publishedAt || ep.createdAt
+      const publishedAtMs = publishedRaw ? new Date(publishedRaw).getTime() : Number.POSITIVE_INFINITY
+      return {
+        id: ep.id,
+        mediaSourceId,
+        playlistPosition,
+        publishedAtMs: Number.isFinite(publishedAtMs) ? publishedAtMs : Number.POSITIVE_INFINITY,
+      }
+    },
+  )
+
+  sortable.sort((a, b) => {
+    const aHas = a.playlistPosition != null
+    const bHas = b.playlistPosition != null
+    if (aHas && bHas && a.playlistPosition !== b.playlistPosition) {
+      return (a.playlistPosition as number) - (b.playlistPosition as number)
+    }
+    if (aHas !== bHas) return aHas ? -1 : 1
+    if (a.publishedAtMs !== b.publishedAtMs) return a.publishedAtMs - b.publishedAtMs
+    return a.id - b.id
+  })
+
+  let assigned = 0
+  for (const row of sortable) {
+    await strapi.db.query('api::show-episode.show-episode').update({
+      where: { id: row.id },
+      data: { episodeNumber: next },
+    })
+    next += 1
+    assigned += 1
+  }
+
+  return assigned
+}
+
+async function backfillMissingEpisodeNumbers(strapi: any): Promise<number> {
+  const missing = await strapi.db.query('api::show-episode.show-episode').findMany({
+    where: { episodeNumber: { $null: true } },
+    populate: ['show'],
+    limit: 5000,
+  })
+
+  const showIdSet = new Set<number>()
+  for (const ep of (missing || []) as Array<{ show?: number | { id?: number } | null }>) {
+    if (typeof ep.show === 'number') showIdSet.add(ep.show)
+    else if (ep.show && typeof ep.show === 'object' && typeof ep.show.id === 'number') {
+      showIdSet.add(ep.show.id)
+    }
+  }
+  const showIds = Array.from(showIdSet)
+
+  let totalAssigned = 0
+  for (const showId of showIds) {
+    totalAssigned += await assignMissingEpisodeNumbers(strapi, showId)
+  }
+  return totalAssigned
+}
+
 export default ({ strapi }) => ({
   async upsertShowEpisodes(source: { id: number; documentId: string }, items: Array<{
     youtubeVideoId: string
@@ -51,6 +194,7 @@ export default ({ strapi }) => ({
     publishedAt: string
     durationSeconds?: number
     mediaSourceId: number
+    playlistPosition?: number | null
   }>) {
     const shows = await strapi.documents('api::show.show').findMany({
       filters: { youtubeSource: { id: source.id } },
@@ -58,11 +202,12 @@ export default ({ strapi }) => ({
     })
 
     if (!shows?.length) {
-      return { episodesCreated: 0, episodesUpdated: 0 }
+      return { episodesCreated: 0, episodesUpdated: 0, episodesNumbered: 0 }
     }
 
     let episodesCreated = 0
     let episodesUpdated = 0
+    let episodesNumbered = 0
 
     for (const show of shows) {
       for (const item of items) {
@@ -112,9 +257,11 @@ export default ({ strapi }) => ({
           episodesCreated += 1
         }
       }
+
+      episodesNumbered += await assignMissingEpisodeNumbers(strapi, show.id)
     }
 
-    return { episodesCreated, episodesUpdated }
+    return { episodesCreated, episodesUpdated, episodesNumbered }
   },
 
   async syncSource(documentId: string) {
@@ -235,6 +382,7 @@ export default ({ strapi }) => ({
       publishedAt: string
       durationSeconds?: number
       mediaSourceId: number
+      playlistPosition?: number | null
     }> = []
 
     const attribution = {
@@ -340,6 +488,8 @@ export default ({ strapi }) => ({
         publishedAt: normalized.publishedAt,
         durationSeconds: normalized.durationSeconds,
         mediaSourceId,
+        playlistPosition:
+          typeof normalized.playlistPosition === 'number' ? normalized.playlistPosition : null,
       })
     }
 
@@ -359,7 +509,7 @@ export default ({ strapi }) => ({
     })
 
     strapi.log.info(
-      `YouTube sync complete for source ${documentId}: imported=${imported} updated=${updated} episodesCreated=${episodeResult.episodesCreated} episodesUpdated=${episodeResult.episodesUpdated}`,
+      `YouTube sync complete for source ${documentId}: imported=${imported} updated=${updated} episodesCreated=${episodeResult.episodesCreated} episodesUpdated=${episodeResult.episodesUpdated} episodesNumbered=${episodeResult.episodesNumbered}`,
     )
 
     return { imported, updated, total, ...episodeResult }
@@ -401,6 +551,21 @@ export default ({ strapi }) => ({
         results.push({ documentId: source.documentId, error: true })
       }
     }
+
+    // Fill any remaining null episodeNumbers (e.g. shows not touched by a source this run).
+    try {
+      const numbered = await backfillMissingEpisodeNumbers(strapi)
+      if (numbered > 0) {
+        strapi.log.info(`Episode number backfill assigned ${numbered} missing number(s)`)
+      }
+    } catch (error) {
+      strapi.log.warn(
+        `Episode number backfill failed: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      )
+    }
+
     return results
   },
 })
