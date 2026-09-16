@@ -973,6 +973,7 @@ export default {
       const {
         syncAllYoutubeSourcesToMediaSources,
         linkPlaylistsToYoutubeMediaSources,
+        backfillPlaylistChannelAttribution,
       } = await import('./utils/youtube-media-source')
       const synced = await syncAllYoutubeSourcesToMediaSources(strapi)
       if (synced > 0) {
@@ -981,6 +982,12 @@ export default {
       const linked = await linkPlaylistsToYoutubeMediaSources(strapi)
       if (linked > 0) {
         strapi.log.info(`Linked ${linked} playlist(s) to YouTube media sources.`)
+      }
+      const backfill = await backfillPlaylistChannelAttribution(strapi)
+      if (backfill.sourcesUpdated || backfill.trafficUpdated) {
+        strapi.log.info(
+          `Playlist channel attribution backfill: sources=${backfill.sourcesUpdated} media=${backfill.mediaUpdated} traffic=${backfill.trafficUpdated}`,
+        )
       }
     } catch (error) {
       strapi.log.warn(

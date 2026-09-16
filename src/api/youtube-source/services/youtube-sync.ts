@@ -156,6 +156,41 @@ export default ({ strapi }) => ({
       })
     }
 
+    // Playlist sources often have no channelId on create — resolve the owner so
+    // media-source rawMeta and traffic events can roll up under a real channel.
+    if (source.sourceType === 'playlist' && source.playlistId) {
+      try {
+        const meta = await youtube.fetchPlaylistMeta(source.playlistId)
+        if (meta?.channelId) {
+          const channelUrl =
+            String(source.channelUrl || '').trim() ||
+            `https://www.youtube.com/channel/${meta.channelId}`
+          const patch: Record<string, string> = {}
+          if (meta.channelId !== source.channelId) {
+            patch.channelId = meta.channelId
+            source.channelId = meta.channelId
+          }
+          if (channelUrl !== source.channelUrl) {
+            patch.channelUrl = channelUrl
+            source.channelUrl = channelUrl
+          }
+          if (Object.keys(patch).length) {
+            await strapi.db.query('api::youtube-source.youtube-source').update({
+              where: { id: source.id },
+              data: patch,
+            })
+          }
+          source.channelTitle = meta.channelTitle
+        }
+      } catch (error) {
+        strapi.log.warn(
+          `Could not resolve playlist owner channel for ${source.playlistId}: ${
+            error instanceof Error ? error.message : 'unknown'
+          }`,
+        )
+      }
+    }
+
     let items = []
     try {
       if (source.sourceType === 'playlist' && source.playlistId) {
@@ -207,6 +242,30 @@ export default ({ strapi }) => ({
       channelUrl: source.channelUrl || null,
       youtubeSourceDocumentId: source.documentId || null,
       youtubeSourceId: source.id ?? null,
+    }
+
+    // Keep the playlist/video catalogue media-source in sync with attribution.
+    try {
+      const { syncMediaSourceFromYoutubeSource } = await import(
+        '../../../utils/youtube-media-source'
+      )
+      await syncMediaSourceFromYoutubeSource(strapi, {
+        id: source.id,
+        documentId: source.documentId,
+        displayTitle: source.displayTitle,
+        sourceType: source.sourceType,
+        playlistId: source.playlistId,
+        videoId: source.videoId,
+        channelId: source.channelId,
+        channelUrl: source.channelUrl,
+        channelTitle: source.channelTitle || null,
+      })
+    } catch (error) {
+      strapi.log.warn(
+        `YouTube source media-source sync skipped: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      )
     }
 
     for (const raw of items) {

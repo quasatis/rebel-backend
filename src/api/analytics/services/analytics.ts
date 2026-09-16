@@ -75,58 +75,6 @@ export default ({ strapi }) => ({
       orderBy: { occurredAt: 'desc' },
     })) as TrafficRow[]
 
-    // #region agent log
-    try {
-      const eventTypeCounts: Record<string, number> = {}
-      const missingChannelId = (rows || []).filter((r) => !String(r?.channelId || '').trim()).length
-      for (const r of rows || []) {
-        const t = String(r?.eventType || 'unknown')
-        eventTypeCounts[t] = (eventTypeCounts[t] || 0) + 1
-      }
-      const uniqueKeys = [
-        ...new Set(
-          (rows || [])
-            .filter((r) => r?.provider && r.externalId && r.eventType)
-            .map((r) => groupKey(r)),
-        ),
-      ]
-      const skipped = (rows || []).filter((r) => !r?.provider || !r.externalId || !r.eventType).length
-      fetch('http://host.docker.internal:7942/ingest/62e9c20b-80f7-427e-9c94-2f7fa55442a7', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Debug-Session-Id': '76e1cd',
-        },
-        body: JSON.stringify({
-          sessionId: '76e1cd',
-          hypothesisId: 'H1,H2,H3',
-          location: 'analytics.ts:channelTraffic:afterFind',
-          message: 'Raw traffic events loaded',
-          data: {
-            from,
-            to,
-            rowCount: (rows || []).length,
-            skipped,
-            missingChannelId,
-            eventTypeCounts,
-            uniqueGroupKeyCount: uniqueKeys.length,
-            uniqueKeys: uniqueKeys.slice(0, 20),
-            sample: (rows || []).slice(0, 8).map((r) => ({
-              provider: r?.provider,
-              externalId: r?.externalId,
-              channelId: r?.channelId,
-              channelTitle: r?.channelTitle,
-              eventType: r?.eventType,
-              groupKey: r ? groupKey(r) : null,
-            })),
-          },
-          timestamp: Date.now(),
-          runId: 'pre-fix',
-        }),
-      }).catch(() => {})
-    } catch (_e) {}
-    // #endregion
-
     const channels = new Map<string, ReturnType<typeof emptyBucket>>()
 
     for (const row of rows || []) {
@@ -215,46 +163,6 @@ export default ({ strapi }) => ({
           b.outboundClicks + b.plays + b.embedImpressions -
           (a.outboundClicks + a.plays + a.embedImpressions),
       )
-
-    // #region agent log
-    try {
-      fetch('http://host.docker.internal:7942/ingest/62e9c20b-80f7-427e-9c94-2f7fa55442a7', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Debug-Session-Id': '76e1cd',
-        },
-        body: JSON.stringify({
-          sessionId: '76e1cd',
-          hypothesisId: 'H1,H4,H5',
-          location: 'analytics.ts:channelTraffic:beforeReturn',
-          message: 'Aggregated channel traffic result',
-          data: {
-            channelCount: channelList.length,
-            totalsPreview: {
-              contentViews: channelList.reduce((sum, c) => sum + c.contentViews, 0),
-              embedImpressions: channelList.reduce((sum, c) => sum + c.embedImpressions, 0),
-              plays: channelList.reduce((sum, c) => sum + c.plays, 0),
-              outboundClicks: channelList.reduce((sum, c) => sum + c.outboundClicks, 0),
-            },
-            channels: channelList.map((c) => ({
-              key: c.key,
-              provider: c.provider,
-              channelId: c.channelId,
-              channelTitle: c.channelTitle,
-              videoCount: Array.isArray(c.videos) ? c.videos.length : 0,
-              contentViews: c.contentViews,
-              embedImpressions: c.embedImpressions,
-              plays: c.plays,
-              outboundClicks: c.outboundClicks,
-            })),
-          },
-          timestamp: Date.now(),
-          runId: 'pre-fix',
-        }),
-      }).catch(() => {})
-    } catch (_e) {}
-    // #endregion
 
     return {
       from,

@@ -180,6 +180,52 @@ export default () => ({
     return enrichVideoDetails(items)
   },
 
+  /**
+   * Resolve the channel that owns a playlist (playlists.list snippet.channelId).
+   * Used so playlist traffic can roll up under a real YouTube channel.
+   */
+  async fetchPlaylistMeta(playlistId: string): Promise<{
+    playlistId: string
+    title: string
+    channelId: string | null
+    channelTitle: string | null
+  } | null> {
+    const id = normalizeYoutubePlaylistId(playlistId)
+    if (!id) return null
+
+    const data = await youtubeGet<{
+      items?: Array<{
+        id?: string
+        snippet?: {
+          title?: string
+          channelId?: string
+          channelTitle?: string
+        }
+      }>
+    }>('playlists', {
+      part: 'snippet',
+      id,
+    }).catch((error: unknown) => {
+      const message = error instanceof Error ? error.message : String(error)
+      if (message.includes('400') || /invalid value/i.test(message)) {
+        throw new Error(
+          `YouTube rejected playlist ID “${id}”. Use a playlist ID (starts with PL…) or a playlist URL — not a video ID.`,
+        )
+      }
+      throw error
+    })
+
+    const item = data.items?.[0]
+    if (!item?.id) return null
+    const channelId = normalizeYoutubeChannelId(item.snippet?.channelId || '') || null
+    return {
+      playlistId: item.id,
+      title: String(item.snippet?.title || '').trim() || 'Untitled playlist',
+      channelId,
+      channelTitle: String(item.snippet?.channelTitle || '').trim() || null,
+    }
+  },
+
   /** Lightweight playlist order (video id + position) without duration enrichment. */
   async fetchPlaylistOrder(
     playlistId: string,
