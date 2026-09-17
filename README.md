@@ -29,6 +29,8 @@ Generate unique values for `APP_KEYS`, `API_TOKEN_SALT`, `ADMIN_JWT_SECRET`, `TR
 | `CLOUDINARY_KEY` | Cloudinary API key |
 | `CLOUDINARY_SECRET` | Cloudinary API secret |
 | `YOUTUBE_API_KEY` | YouTube Data API v3 key |
+| `CONTACT_TO` / `CONTACT_FROM` | Contact form recipient / sender (default `team@quasatis.com`) |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | Nodemailer SMTP for contact emails |
 | `NETLIFY_BUILD_HOOK_URL` | Trigger frontend rebuilds |
 | `CORS_ORIGIN` | Comma-separated frontend origins |
 

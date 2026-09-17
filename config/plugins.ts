@@ -18,6 +18,32 @@ export default ({ env }) => ({
       jwtSecret: env('JWT_SECRET'),
     },
   },
+  // Only switch to nodemailer when SMTP is configured. Otherwise keep Strapi’s
+  // default sendmail provider so the app can boot (e.g. before Docker rebuild).
+  ...(env('SMTP_HOST')
+    ? {
+        email: {
+          config: {
+            provider: 'nodemailer',
+            providerOptions: {
+              host: env('SMTP_HOST'),
+              port: env.int('SMTP_PORT', 587),
+              secure: env.bool('SMTP_SECURE', false),
+              auth: env('SMTP_USER')
+                ? {
+                    user: env('SMTP_USER'),
+                    pass: env('SMTP_PASS'),
+                  }
+                : undefined,
+            },
+            settings: {
+              defaultFrom: env('CONTACT_FROM', 'team@quasatis.com'),
+              defaultReplyTo: env('CONTACT_FROM', 'team@quasatis.com'),
+            },
+          },
+        },
+      }
+    : {}),
   upload: {
     config: {
       sizeLimit: 10 * 1024 * 1024, // 10 MB

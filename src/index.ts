@@ -27,6 +27,7 @@ const CONTENT_UIDS = [
   'api::about-page.about-page',
   'api::newsletter-config.newsletter-config',
   'api::newsletter-subscription.newsletter-subscription',
+  'api::contact-message.contact-message',
   'api::media-traffic-event.media-traffic-event',
   'api::synced-video.synced-video',
   'api::youtube-source.youtube-source',
@@ -64,6 +65,7 @@ async function setPublicPermissions(strapi: Core.Strapi) {
   // MediaSource stays public so FO can populate embeds on published content.
   const publicDenied = new Set([
     'api::newsletter-subscription.newsletter-subscription',
+    'api::contact-message.contact-message',
     'api::media-traffic-event.media-traffic-event',
     'api::youtube-source.youtube-source',
     'api::synced-video.synced-video',
@@ -90,6 +92,11 @@ async function setPublicPermissions(strapi: Core.Strapi) {
     strapi,
     publicRole.id,
     'api::newsletter-subscription.newsletter-subscription.create',
+  )
+  await ensurePermission(
+    strapi,
+    publicRole.id,
+    'api::contact-message.contact-message.create',
   )
   await ensurePermission(
     strapi,
@@ -341,22 +348,6 @@ async function seedDemoContent(strapi: Core.Strapi) {
     },
   )
 
-  const mediaSource = await ensureDocument(
-    'api::media-source.media-source',
-    'youtube:dQw4w9WgXcQ',
-    { providerExternalKey: 'youtube:dQw4w9WgXcQ' },
-    {
-      provider: 'youtube',
-      externalId: 'dQw4w9WgXcQ',
-      externalUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
-      title: 'Featured Studio Session',
-      thumbnailUrl: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
-      durationSeconds: 212,
-      providerExternalKey: 'youtube:dQw4w9WgXcQ',
-      rawMeta: { seed: true },
-    },
-  )
-
   const article = await ensureDocument(
     'api::article.article',
     'the-sound-of-a-new-generation',
@@ -557,7 +548,6 @@ async function seedDemoContent(strapi: Core.Strapi) {
       trackNumber: 1,
       durationSeconds: 212,
       release: release.documentId,
-      mediaSource: mediaSource.documentId,
     },
   )
 
@@ -573,39 +563,6 @@ async function seedDemoContent(strapi: Core.Strapi) {
       displayOrder: 1,
       active: true,
       artist: artist.documentId,
-      mediaSource: mediaSource.documentId,
-    },
-    { publish: true },
-  )
-
-  const studioVideo = await ensureDocument(
-    'api::studio-video.studio-video',
-    'studio-cut-night-drive',
-    { slug: 'studio-cut-night-drive' },
-    {
-      title: 'Studio Cut: Night Drive',
-      slug: 'studio-cut-night-drive',
-      description: 'A cinematic short from the Rebel Studio desk.',
-      mediaSource: mediaSource.documentId,
-      durationSeconds: 212,
-      releaseDate: new Date().toISOString(),
-      featured: true,
-      visibility: 'public',
-      sortOrder: 1,
-    },
-    { publish: true },
-  )
-
-  await ensureDocument(
-    'api::video-collection.video-collection',
-    'night-drives',
-    { slug: 'night-drives' },
-    {
-      title: 'Night Drives',
-      slug: 'night-drives',
-      description: 'Cinematic studio cuts for late hours.',
-      featured: true,
-      videos: [studioVideo.documentId],
     },
     { publish: true },
   )
@@ -862,6 +819,140 @@ async function seedDemoContent(strapi: Core.Strapi) {
   strapi.log.info('Demo content seed complete')
 }
 
+/** One-shot cleanup for retired seed content editors already tried to delete. */
+async function removeRetiredDemoVideos(strapi: Core.Strapi) {
+  const retiredStudioSlugs = ['studio-cut-night-drive']
+  const retiredCollectionSlugs = ['night-drives']
+  const retiredMediaKeys = ['youtube:dQw4w9WgXcQ']
+  const retiredShowSlugs = ['rebel-sessions']
+  const retiredEpisodeSlugs = ['episode-01-opening-night']
+
+  async function deleteBySlug(
+    uid: 'api::studio-video.studio-video' | 'api::video-collection.video-collection' | 'api::show.show' | 'api::show-episode.show-episode',
+    slug: string,
+    label: string,
+  ) {
+    const drafts = await strapi.documents(uid).findMany({
+      filters: { slug },
+      limit: 20,
+      status: 'draft',
+    })
+    const published = await strapi.documents(uid).findMany({
+      filters: { slug },
+      limit: 20,
+      status: 'published',
+    })
+    const seen = new Set<string>()
+    for (const row of [...drafts, ...published]) {
+      if (!row?.documentId || seen.has(row.documentId)) continue
+      seen.add(row.documentId)
+      await strapi.documents(uid).delete({
+        documentId: row.documentId,
+      })
+      strapi.log.info(`Removed retired demo ${label}: ${slug}`)
+    }
+  }
+
+  for (const slug of retiredStudioSlugs) {
+    await deleteBySlug('api::studio-video.studio-video', slug, 'studio video')
+  }
+
+  for (const slug of retiredCollectionSlugs) {
+    await deleteBySlug('api::video-collection.video-collection', slug, 'video collection')
+  }
+
+  for (const slug of retiredEpisodeSlugs) {
+    await deleteBySlug('api::show-episode.show-episode', slug, 'show episode')
+  }
+
+  for (const slug of retiredShowSlugs) {
+    // Episodes first so orphan relations do not block show delete.
+    const showDrafts = await strapi.documents('api::show.show').findMany({
+      filters: { slug },
+      limit: 20,
+      status: 'draft',
+    })
+    const showPublished = await strapi.documents('api::show.show').findMany({
+      filters: { slug },
+      limit: 20,
+      status: 'published',
+    })
+    const showIds = new Set<string>()
+    for (const show of [...showDrafts, ...showPublished]) {
+      if (show?.documentId) showIds.add(show.documentId)
+    }
+    for (const documentId of showIds) {
+      const epDrafts = await strapi.documents('api::show-episode.show-episode').findMany({
+        filters: { show: { documentId } },
+        limit: 100,
+        status: 'draft',
+      })
+      const epPublished = await strapi.documents('api::show-episode.show-episode').findMany({
+        filters: { show: { documentId } },
+        limit: 100,
+        status: 'published',
+      })
+      const epSeen = new Set<string>()
+      for (const ep of [...epDrafts, ...epPublished]) {
+        if (!ep?.documentId || epSeen.has(ep.documentId)) continue
+        epSeen.add(ep.documentId)
+        await strapi.documents('api::show-episode.show-episode').delete({
+          documentId: ep.documentId,
+        })
+      }
+      await strapi.documents('api::show.show').delete({ documentId })
+      strapi.log.info(`Removed retired demo show: ${slug}`)
+    }
+  }
+
+  for (const providerExternalKey of retiredMediaKeys) {
+    const sources = await strapi.documents('api::media-source.media-source').findMany({
+      filters: { providerExternalKey },
+      limit: 10,
+    })
+    for (const source of sources) {
+      if (!source?.documentId) continue
+
+      const linkedTracks = await strapi.documents('api::track.track').findMany({
+        filters: { mediaSource: { documentId: source.documentId } },
+        limit: 50,
+      })
+      for (const track of linkedTracks) {
+        if (!track?.documentId) continue
+        await strapi.documents('api::track.track').update({
+          documentId: track.documentId,
+          data: { mediaSource: null } as never,
+        })
+      }
+
+      const linkedPlaylists = await strapi.documents('api::playlist.playlist').findMany({
+        filters: { mediaSource: { documentId: source.documentId } },
+        limit: 50,
+        status: 'published',
+      })
+      const draftPlaylists = await strapi.documents('api::playlist.playlist').findMany({
+        filters: { mediaSource: { documentId: source.documentId } },
+        limit: 50,
+        status: 'draft',
+      })
+      const playlistSeen = new Set<string>()
+      for (const playlist of [...linkedPlaylists, ...draftPlaylists]) {
+        if (!playlist?.documentId || playlistSeen.has(playlist.documentId)) continue
+        playlistSeen.add(playlist.documentId)
+        await strapi.documents('api::playlist.playlist').update({
+          documentId: playlist.documentId,
+          data: { mediaSource: null } as never,
+        })
+      }
+
+      await strapi.documents('api::media-source.media-source').delete({
+        documentId: source.documentId,
+      })
+      strapi.log.info(`Removed retired demo media source: ${providerExternalKey}`)
+    }
+  }
+}
+
 let netlifyTimer: ReturnType<typeof setTimeout> | null = null
 let netlifyPendingReason = ''
 
@@ -933,6 +1024,16 @@ export default {
     } catch (error) {
       strapi.log.error(
         `Backoffice user seed failed: ${error instanceof Error ? error.message : 'unknown'}`,
+      )
+    }
+
+    try {
+      await removeRetiredDemoVideos(strapi)
+    } catch (error) {
+      strapi.log.warn(
+        `Retired demo video cleanup skipped: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
       )
     }
 
