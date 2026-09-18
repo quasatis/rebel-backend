@@ -19,14 +19,16 @@
     },
     "externalId": {
       "type": "string",
-      "required": true
+      "required": true,
+      "maxLength": 80
     },
     "externalUrl": {
       "type": "string",
       "required": true
     },
     "title": {
-      "type": "string"
+      "type": "string",
+      "maxLength": 100
     },
     "thumbnailUrl": {
       "type": "text"

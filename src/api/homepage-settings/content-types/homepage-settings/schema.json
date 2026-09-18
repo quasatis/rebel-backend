@@ -8,25 +8,26 @@
   },
   "options": { "draftAndPublish": false },
   "attributes": {
-    "latestTitle": { "type": "string", "default": "Latest from Rebel" },
+    "latestTitle": { "type": "string", "default": "Latest from Rebel", "maxLength": 100 },
     "latestEnabled": { "type": "boolean", "default": true },
     "latestArticleDocumentIds": {
       "type": "json",
       "default": []
     },
-    "musicTitle": { "type": "string", "default": "Music" },
+    "musicTitle": { "type": "string", "default": "Music", "maxLength": 100 },
     "musicEnabled": { "type": "boolean", "default": true },
-    "showsTitle": { "type": "string", "default": "Shows" },
+    "showsTitle": { "type": "string", "default": "Shows", "maxLength": 100 },
     "showsEnabled": { "type": "boolean", "default": true },
-    "newsTitle": { "type": "string", "default": "News" },
+    "newsTitle": { "type": "string", "default": "News", "maxLength": 100 },
     "newsEnabled": { "type": "boolean", "default": true },
-    "studioTitle": { "type": "string", "default": "Studio" },
+    "studioTitle": { "type": "string", "default": "Studio", "maxLength": 100 },
     "studioEnabled": { "type": "boolean", "default": true },
-    "eventsTitle": { "type": "string", "default": "Events" },
+    "eventsTitle": { "type": "string", "default": "Events", "maxLength": 100 },
     "eventsEnabled": { "type": "boolean", "default": true },
     "newsletterEnabled": { "type": "boolean", "default": true },
     "footerTagline": {
       "type": "text",
+      "maxLength": 160,
       "default": "The platform for black creatives by black creatives. Music, Culture, Community."
     },
     "socialInstagramUrl": { "type": "string" },

@@ -1,5 +1,10 @@
 import { errors } from '@strapi/utils'
 import { setDocumentPublishedAt } from '../../../utils/publish-date'
+import {
+  PREVIEW_COLLECTIONS,
+  signPreviewToken,
+  verifyPreviewToken,
+} from '../../../utils/preview-token'
 
 function uidFromCollection(strapi: any, collection: string): string | null {
   const plural = String(collection || '').trim()
@@ -27,6 +32,56 @@ function resolveDraftPublishUid(strapi: any, collection: string, documentId: unk
   }
 
   return uid
+}
+
+/** Populate shape close to FO `populate: '*'` for article draft preview. */
+const ARTICLE_PREVIEW_POPULATE = {
+  featuredImage: true,
+  socialImage: true,
+  gallery: true,
+  author: true,
+  category: true,
+  tags: true,
+  relatedArticles: {
+    populate: ['featuredImage', 'category', 'author'],
+  },
+}
+
+function previewPopulate(collection: string) {
+  if (collection === 'articles') return ARTICLE_PREVIEW_POPULATE
+  return '*'
+}
+
+/**
+ * Keep only related articles that already have a live published version so
+ * draft preview does not leak other unpublished stories.
+ */
+async function filterPublishedRelated(
+  strapi: any,
+  uid: string,
+  related: unknown,
+): Promise<unknown[]> {
+  if (!Array.isArray(related) || !related.length) return []
+
+  const kept: unknown[] = []
+  for (const item of related) {
+    const documentId =
+      item && typeof item === 'object' && 'documentId' in item
+        ? String((item as { documentId?: string }).documentId || '')
+        : ''
+    if (!documentId) continue
+    try {
+      const live = await strapi.documents(uid).findOne({
+        documentId,
+        status: 'published',
+        fields: ['documentId'],
+      })
+      if (live) kept.push(item)
+    } catch {
+      // skip
+    }
+  }
+  return kept
 }
 
 export default ({ strapi }: { strapi: any }) => ({
@@ -65,5 +120,108 @@ export default ({ strapi }: { strapi: any }) => ({
     }
 
     ctx.body = { data: { documentId: String(documentId), publishedAt } }
+  },
+
+  /**
+   * Mint a short-lived signed preview token for the draft version.
+   * Requires an authenticated Admin/Editor (users-permissions).
+   */
+  async previewToken(ctx: any) {
+    const { collection, documentId } = ctx.params || {}
+    if (!ctx.state?.user) {
+      return ctx.unauthorized('Authentication required')
+    }
+
+    const plural = String(collection || '').trim()
+    if (!PREVIEW_COLLECTIONS[plural]) {
+      throw new errors.ValidationError(`Preview is not enabled for “${plural}”.`)
+    }
+
+    const uid = resolveDraftPublishUid(strapi, plural, documentId)
+    const draft = await strapi.documents(uid).findOne({
+      documentId: String(documentId),
+      status: 'draft',
+      fields: ['documentId', 'slug', 'title'],
+    })
+
+    if (!draft) {
+      throw new errors.NotFoundError('Draft not found.')
+    }
+
+    const slug = String(draft.slug || '').trim()
+    if (!slug) {
+      throw new errors.ValidationError('Save a slug before previewing.')
+    }
+
+    try {
+      const minted = signPreviewToken({
+        collection: plural,
+        documentId: String(documentId),
+        slug,
+      })
+      ctx.body = { data: minted }
+    } catch (err) {
+      throw new errors.ApplicationError(
+        err instanceof Error ? err.message : 'Could not mint preview token.',
+      )
+    }
+  },
+
+  /**
+   * Public, token-gated draft fetch. Does not grant general status=draft access.
+   */
+  async preview(ctx: any) {
+    const plural = String(ctx.params?.collection || '').trim()
+    if (!PREVIEW_COLLECTIONS[plural]) {
+      throw new errors.ValidationError(`Preview is not enabled for “${plural}”.`)
+    }
+
+    const token = String(ctx.query?.token || '').trim()
+    const slugQuery = String(ctx.query?.slug || '').trim()
+    if (!token) {
+      throw new errors.ValidationError('Preview token is required.')
+    }
+
+    let claims
+    try {
+      claims = verifyPreviewToken(token)
+    } catch (err) {
+      throw new errors.UnauthorizedError(
+        err instanceof Error ? err.message : 'Invalid preview token.',
+      )
+    }
+
+    if (claims.collection !== plural) {
+      throw new errors.UnauthorizedError('Preview token does not match this collection.')
+    }
+    if (slugQuery && slugQuery !== claims.slug) {
+      throw new errors.UnauthorizedError('Preview token does not match this slug.')
+    }
+
+    const uid = uidFromCollection(strapi, plural)
+    if (!uid) {
+      throw new errors.NotFoundError(`Unknown collection “${plural}”.`)
+    }
+
+    const draft = await strapi.documents(uid).findOne({
+      documentId: claims.documentId,
+      status: 'draft',
+      populate: previewPopulate(plural),
+    })
+
+    if (!draft) {
+      throw new errors.NotFoundError('Draft not found.')
+    }
+
+    const draftSlug = String(draft.slug || '').trim()
+    if (draftSlug !== claims.slug) {
+      throw new errors.UnauthorizedError('Preview token does not match the current draft slug.')
+    }
+
+    if (plural === 'articles' && Array.isArray(draft.relatedArticles)) {
+      draft.relatedArticles = await filterPublishedRelated(strapi, uid, draft.relatedArticles)
+    }
+
+    ctx.body = { data: draft }
   },
 })

@@ -8,10 +8,10 @@
   },
   "options": { "draftAndPublish": true },
   "attributes": {
-    "title": { "type": "string", "required": true },
+    "title": { "type": "string", "required": true, "maxLength": 100 },
     "slug": { "type": "uid", "targetField": "title", "required": true },
-    "description": { "type": "text" },
-    "shortDescription": { "type": "text" },
+    "description": { "type": "text", "maxLength": 2000 },
+    "shortDescription": { "type": "text", "maxLength": 200 },
     "coverImage": {
       "type": "media",
       "multiple": false,
@@ -31,8 +31,8 @@
     "featuredOrder": { "type": "integer", "default": 0 },
     "sortOrder": { "type": "integer", "default": 0 },
     "isActive": { "type": "boolean", "default": true },
-    "seoTitle": { "type": "string" },
-    "seoDescription": { "type": "text" },
+    "seoTitle": { "type": "string", "maxLength": 70 },
+    "seoDescription": { "type": "text", "maxLength": 160 },
     "socialImage": {
       "type": "media",
       "multiple": false,

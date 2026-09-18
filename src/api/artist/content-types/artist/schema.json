@@ -8,9 +8,9 @@
   },
   "options": { "draftAndPublish": true },
   "attributes": {
-    "name": { "type": "string", "required": true },
+    "name": { "type": "string", "required": true, "maxLength": 100 },
     "slug": { "type": "uid", "targetField": "name", "required": true },
-    "biography": { "type": "text" },
+    "biography": { "type": "text", "maxLength": 5000 },
     "profileImage": {
       "type": "media",
       "multiple": false,

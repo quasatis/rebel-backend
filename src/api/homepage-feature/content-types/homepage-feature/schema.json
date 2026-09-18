@@ -13,11 +13,11 @@
       "enum": ["article", "studio-video", "music-release", "event", "show"],
       "required": true
     },
-    "headline": { "type": "string" },
-    "description": { "type": "text" },
-    "ctaLabel": { "type": "string" },
+    "headline": { "type": "string", "maxLength": 100 },
+    "description": { "type": "text", "maxLength": 200 },
+    "ctaLabel": { "type": "string", "maxLength": 40 },
     "ctaUrl": { "type": "string" },
-    "categoryLabel": { "type": "string" },
+    "categoryLabel": { "type": "string", "maxLength": 80 },
     "image": {
       "type": "media",
       "multiple": false,

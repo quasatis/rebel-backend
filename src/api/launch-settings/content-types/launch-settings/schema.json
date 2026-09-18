@@ -19,10 +19,12 @@
     },
     "headline": {
       "type": "string",
-      "default": "We launch soon"
+      "default": "We launch soon",
+      "maxLength": 100
     },
     "subheadline": {
       "type": "text",
+      "maxLength": 200,
       "default": "REBEL AFRIQUE is almost here — music, culture, and community."
     },
     "showNewsletter": {

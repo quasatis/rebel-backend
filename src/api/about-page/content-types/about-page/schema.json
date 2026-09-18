@@ -8,10 +8,10 @@
   },
   "options": { "draftAndPublish": false },
   "attributes": {
-    "headline": { "type": "string", "default": "About" },
-    "intro": { "type": "text" },
+    "headline": { "type": "string", "default": "About", "maxLength": 100 },
+    "intro": { "type": "text", "maxLength": 300 },
     "body": { "type": "blocks" },
-    "seoTitle": { "type": "string" },
-    "seoDescription": { "type": "text" }
+    "seoTitle": { "type": "string", "maxLength": 70 },
+    "seoDescription": { "type": "text", "maxLength": 160 }
   }
 }

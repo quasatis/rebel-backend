@@ -8,7 +8,7 @@
   },
   "options": { "draftAndPublish": false },
   "attributes": {
-    "displayTitle": { "type": "string", "required": true },
+    "displayTitle": { "type": "string", "required": true, "maxLength": 100 },
     "sourceType": {
       "type": "enumeration",
       "enum": ["channel", "playlist", "video", "username"],
@@ -19,7 +19,7 @@
     "username": { "type": "string" },
     "playlistId": { "type": "string" },
     "videoId": { "type": "string" },
-    "description": { "type": "text" },
+    "description": { "type": "text", "maxLength": 2000 },
     "active": { "type": "boolean", "default": true },
     "syncEnabled": { "type": "boolean", "default": true },
     "lastSyncedAt": { "type": "datetime" },

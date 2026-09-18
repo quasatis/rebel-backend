@@ -12,9 +12,9 @@
   },
   "pluginOptions": {},
   "attributes": {
-    "title": { "type": "string", "required": true },
+    "title": { "type": "string", "required": true, "maxLength": 100 },
     "slug": { "type": "uid", "targetField": "title", "required": true },
-    "excerpt": { "type": "text" },
+    "excerpt": { "type": "text", "maxLength": 200 },
     "content": { "type": "blocks" },
     "featuredImage": {
       "type": "media",
@@ -34,8 +34,8 @@
       "type": "datetime",
       "description": "When set on a draft, a cron job publishes the article at this time"
     },
-    "seoTitle": { "type": "string" },
-    "seoDescription": { "type": "text" },
+    "seoTitle": { "type": "string", "maxLength": 70 },
+    "seoDescription": { "type": "text", "maxLength": 160 },
     "socialImage": {
       "type": "media",
       "multiple": false,
@@ -45,6 +45,7 @@
     "canonicalUrl": { "type": "string" },
     "source": {
       "type": "string",
+      "maxLength": 120,
       "description": "News outlet or wire attribution shown under the byline"
     },
     "sourceUrl": {

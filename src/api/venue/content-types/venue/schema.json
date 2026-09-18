@@ -8,7 +8,7 @@
   },
   "options": { "draftAndPublish": false },
   "attributes": {
-    "name": { "type": "string", "required": true },
+    "name": { "type": "string", "required": true, "maxLength": 100 },
     "slug": { "type": "uid", "targetField": "name", "required": true },
     "address": { "type": "string" },
     "city": { "type": "string" },

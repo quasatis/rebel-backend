@@ -106,6 +106,8 @@ async function setPublicPermissions(strapi: Core.Strapi) {
   // Playlist detail may list synced YouTube videos without exposing synced-video find.
   await ensurePermission(strapi, publicRole.id, 'api::playlist.playlist.videos')
   await ensurePermission(strapi, publicRole.id, 'api::search.search.search')
+  // Token-gated draft preview (no general status=draft on content APIs).
+  await ensurePermission(strapi, publicRole.id, 'api::document-actions.document-actions.preview')
 }
 
 async function setRoleContentPermissions(
@@ -139,6 +141,11 @@ async function setRoleContentPermissions(
       strapi,
       roleId,
       'api::document-actions.document-actions.setPublishDate',
+    )
+    await ensurePermission(
+      strapi,
+      roleId,
+      'api::document-actions.document-actions.previewToken',
     )
   }
 }

@@ -8,11 +8,11 @@
   },
   "options": { "draftAndPublish": false },
   "attributes": {
-    "headline": { "type": "text" },
-    "accentText": { "type": "string" },
-    "supportingText": { "type": "text" },
-    "placeholder": { "type": "string" },
-    "ctaLabel": { "type": "string" },
+    "headline": { "type": "text", "maxLength": 100 },
+    "accentText": { "type": "string", "maxLength": 80 },
+    "supportingText": { "type": "text", "maxLength": 200 },
+    "placeholder": { "type": "string", "maxLength": 60 },
+    "ctaLabel": { "type": "string", "maxLength": 40 },
     "coverImage": {
       "type": "media",
       "multiple": false,

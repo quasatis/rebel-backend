@@ -23,5 +23,24 @@ export default {
         middlewares: [],
       },
     },
+    {
+      method: 'POST',
+      path: '/document-actions/:collection/:documentId/preview-token',
+      handler: 'document-actions.previewToken',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
+    {
+      method: 'GET',
+      path: '/document-actions/:collection/preview',
+      handler: 'document-actions.preview',
+      config: {
+        auth: false,
+        policies: [],
+        middlewares: [],
+      },
+    },
   ],
 }

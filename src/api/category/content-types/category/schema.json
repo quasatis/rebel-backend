@@ -15,7 +15,8 @@
     "name": {
       "type": "string",
       "required": true,
-      "unique": true
+      "unique": true,
+      "maxLength": 100
     },
     "slug": {
       "type": "uid",
@@ -23,7 +24,8 @@
       "required": true
     },
     "description": {
-      "type": "text"
+      "type": "text",
+      "maxLength": 2000
     },
     "articles": {
       "type": "relation",
