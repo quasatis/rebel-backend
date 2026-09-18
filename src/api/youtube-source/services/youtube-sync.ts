@@ -1,4 +1,5 @@
 import {
+  isYoutubeChannelId,
   normalizeYoutubeChannelId,
   normalizeYoutubePlaylistId,
   normalizeYoutubeUsername,
@@ -185,6 +186,71 @@ async function backfillMissingEpisodeNumbers(strapi: any): Promise<number> {
   return totalAssigned
 }
 
+/**
+ * For playlist sources: drop synced-videos that are no longer in the playlist,
+ * and deactivate linked show episodes that aren't in the current item set.
+ */
+async function pruneSourceToSyncedItems(
+  strapi: any,
+  source: { id: number; documentId: string },
+  keepItems: Array<{ youtubeVideoId: string; mediaSourceId: number }>,
+): Promise<number> {
+  const keepVideoIds = new Set(keepItems.map((item) => item.youtubeVideoId).filter(Boolean))
+  const keepMediaIds = new Set(
+    keepItems.map((item) => item.mediaSourceId).filter((id) => typeof id === 'number'),
+  )
+
+  const linked = await strapi.db.query('api::synced-video.synced-video').findMany({
+    where: { youtubeSource: source.id },
+    limit: 5000,
+  })
+
+  let pruned = 0
+  for (const row of linked || []) {
+    const videoId = String(row.youtubeVideoId || '')
+    if (videoId && keepVideoIds.has(videoId)) continue
+    await strapi.db.query('api::synced-video.synced-video').delete({
+      where: { id: row.id },
+    })
+    pruned += 1
+  }
+
+  const shows = await strapi.documents('api::show.show').findMany({
+    filters: { youtubeSource: { id: source.id } },
+    limit: 50,
+  })
+
+  for (const show of shows || []) {
+    const episodes = await strapi.db.query('api::show-episode.show-episode').findMany({
+      where: { show: show.id },
+      limit: 5000,
+    })
+    for (const ep of episodes || []) {
+      const mediaId =
+        typeof ep.mediaSource === 'number'
+          ? ep.mediaSource
+          : ep.mediaSource && typeof ep.mediaSource === 'object'
+            ? ep.mediaSource.id
+            : null
+      if (typeof mediaId !== 'number') continue
+      const shouldBeActive = keepMediaIds.has(mediaId)
+      if (shouldBeActive && ep.isActive === false) {
+        await strapi.db.query('api::show-episode.show-episode').update({
+          where: { id: ep.id },
+          data: { isActive: true },
+        })
+      } else if (!shouldBeActive && ep.isActive !== false) {
+        await strapi.db.query('api::show-episode.show-episode').update({
+          where: { id: ep.id },
+          data: { isActive: false },
+        })
+      }
+    }
+  }
+
+  return pruned
+}
+
 export default ({ strapi }) => ({
   async upsertShowEpisodes(source: { id: number; documentId: string }, items: Array<{
     youtubeVideoId: string
@@ -279,6 +345,7 @@ export default ({ strapi }) => ({
     const normalizer = strapi.service('api::youtube-source.youtube-normalizer')
 
     // Persist cleaned IDs when editors pasted full YouTube URLs.
+    const rawChannelId = String(source.channelId || '').trim()
     const cleaned = {
       playlistId: source.playlistId
         ? normalizeYoutubePlaylistId(source.playlistId)
@@ -289,13 +356,69 @@ export default ({ strapi }) => ({
         : source.channelId,
       username: source.username ? normalizeYoutubeUsername(source.username) : source.username,
     }
+
+    // Heal @handle URLs pasted into Channel ID — but never for playlist sources
+    // (playlist sync must stay scoped to playlistId only).
+    if (
+      source.sourceType !== 'playlist' &&
+      !cleaned.username &&
+      rawChannelId &&
+      !isYoutubeChannelId(rawChannelId)
+    ) {
+      const handleFromChannel = normalizeYoutubeUsername(rawChannelId)
+      if (handleFromChannel) cleaned.username = handleFromChannel
+    }
+
     const idPatch: Record<string, string | null> = {}
     for (const key of ['playlistId', 'videoId', 'channelId', 'username'] as const) {
-      if (cleaned[key] && cleaned[key] !== source[key]) {
-        idPatch[key] = cleaned[key]
-        source[key] = cleaned[key]
+      const next = cleaned[key] || null
+      const prev = source[key] || null
+      if (next !== prev) {
+        idPatch[key] = next
+        source[key] = next
       }
     }
+
+    // If the declared type has no matching id, pick the best available type.
+    // Prefer an explicit playlistId over channel/username so editors who only
+    // paste a playlist stay on playlist sync.
+    const inferredType = (() => {
+      if (source.sourceType === 'playlist' && source.playlistId) return 'playlist'
+      if (source.playlistId && source.sourceType !== 'channel' && source.sourceType !== 'username') {
+        return 'playlist'
+      }
+      if (source.sourceType === 'channel' && isYoutubeChannelId(source.channelId)) return 'channel'
+      if (source.sourceType === 'username' && source.username) return 'username'
+      if (source.sourceType === 'video' && source.videoId) return 'video'
+      if (source.playlistId) return 'playlist'
+      if (isYoutubeChannelId(source.channelId)) return 'channel'
+      if (source.username) return 'username'
+      if (source.videoId) return 'video'
+      return source.sourceType
+    })()
+    if (inferredType && inferredType !== source.sourceType) {
+      idPatch.sourceType = inferredType
+      source.sourceType = inferredType
+    }
+
+    // Playlist sources should not carry channel/username fields — those make it
+    // look like a channel sync and confuse editors. Attribution still resolves
+    // the owner channel in-memory below.
+    if (source.sourceType === 'playlist') {
+      if (source.channelId) {
+        idPatch.channelId = null
+        source.channelId = null
+      }
+      if (source.channelUrl) {
+        idPatch.channelUrl = null
+        source.channelUrl = null
+      }
+      if (source.username) {
+        idPatch.username = null
+        source.username = null
+      }
+    }
+
     if (Object.keys(idPatch).length) {
       await strapi.db.query('api::youtube-source.youtube-source').update({
         where: { id: source.id },
@@ -303,31 +426,17 @@ export default ({ strapi }) => ({
       })
     }
 
-    // Playlist sources often have no channelId on create — resolve the owner so
-    // media-source rawMeta and traffic events can roll up under a real channel.
+    // Resolve playlist owner for traffic attribution only (do not persist on the source).
+    let attributionChannelId = source.channelId || null
+    let attributionChannelUrl = source.channelUrl || null
+    let attributionChannelTitle: string | null = source.channelTitle || null
     if (source.sourceType === 'playlist' && source.playlistId) {
       try {
         const meta = await youtube.fetchPlaylistMeta(source.playlistId)
         if (meta?.channelId) {
-          const channelUrl =
-            String(source.channelUrl || '').trim() ||
-            `https://www.youtube.com/channel/${meta.channelId}`
-          const patch: Record<string, string> = {}
-          if (meta.channelId !== source.channelId) {
-            patch.channelId = meta.channelId
-            source.channelId = meta.channelId
-          }
-          if (channelUrl !== source.channelUrl) {
-            patch.channelUrl = channelUrl
-            source.channelUrl = channelUrl
-          }
-          if (Object.keys(patch).length) {
-            await strapi.db.query('api::youtube-source.youtube-source').update({
-              where: { id: source.id },
-              data: patch,
-            })
-          }
-          source.channelTitle = meta.channelTitle
+          attributionChannelId = meta.channelId
+          attributionChannelUrl = `https://www.youtube.com/channel/${meta.channelId}`
+          attributionChannelTitle = meta.channelTitle || attributionChannelTitle
         }
       } catch (error) {
         strapi.log.warn(
@@ -358,7 +467,18 @@ export default ({ strapi }) => ({
         const one = await youtube.fetchVideo(source.videoId)
         items = one ? [one] : []
       } else {
-        throw new Error('Source is missing required identifiers')
+        const type = String(source.sourceType || 'unknown')
+        const hint =
+          type === 'video'
+            ? 'Set a Video ID, or change Source type to Username/Channel/Playlist.'
+            : type === 'playlist'
+              ? 'Set a Playlist ID.'
+              : type === 'channel'
+                ? 'Set a Channel ID (UC…).'
+                : type === 'username'
+                  ? 'Set a Username / @handle.'
+                  : 'Check Source type and identifiers.'
+        throw new Error(`Source is missing required identifiers for type “${type}”. ${hint}`)
       }
     } catch (error) {
       const message = formatSyncFailure(error)
@@ -386,8 +506,8 @@ export default ({ strapi }) => ({
     }> = []
 
     const attribution = {
-      channelId: source.channelId || null,
-      channelUrl: source.channelUrl || null,
+      channelId: attributionChannelId,
+      channelUrl: attributionChannelUrl,
       youtubeSourceDocumentId: source.documentId || null,
       youtubeSourceId: source.id ?? null,
     }
@@ -404,9 +524,9 @@ export default ({ strapi }) => ({
         sourceType: source.sourceType,
         playlistId: source.playlistId,
         videoId: source.videoId,
-        channelId: source.channelId,
-        channelUrl: source.channelUrl,
-        channelTitle: source.channelTitle || null,
+        channelId: attributionChannelId,
+        channelUrl: attributionChannelUrl,
+        channelTitle: attributionChannelTitle,
       })
     } catch (error) {
       strapi.log.warn(
@@ -495,6 +615,11 @@ export default ({ strapi }) => ({
 
     const episodeResult = await this.upsertShowEpisodes(source, upsertPayload)
 
+    let pruned = 0
+    if (source.sourceType === 'playlist') {
+      pruned = await pruneSourceToSyncedItems(strapi, source, upsertPayload)
+    }
+
     const total = await strapi.db.query('api::synced-video.synced-video').count({
       where: { youtubeSource: source.id },
     })
@@ -509,10 +634,10 @@ export default ({ strapi }) => ({
     })
 
     strapi.log.info(
-      `YouTube sync complete for source ${documentId}: imported=${imported} updated=${updated} episodesCreated=${episodeResult.episodesCreated} episodesUpdated=${episodeResult.episodesUpdated} episodesNumbered=${episodeResult.episodesNumbered}`,
+      `YouTube sync complete for source ${documentId}: imported=${imported} updated=${updated} pruned=${pruned} episodesCreated=${episodeResult.episodesCreated} episodesUpdated=${episodeResult.episodesUpdated} episodesNumbered=${episodeResult.episodesNumbered}`,
     )
 
-    return { imported, updated, total, ...episodeResult }
+    return { imported, updated, pruned, total, ...episodeResult }
   },
 
   async syncShow(showDocumentId: string) {

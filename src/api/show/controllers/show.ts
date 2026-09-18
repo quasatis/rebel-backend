@@ -12,10 +12,14 @@ export default factories.createCoreController('api::show.show', ({ strapi }) => 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown'
       strapi.log.error(`Manual Show sync failed: ${message}`)
-      if (message.includes('no YouTube source') || message.includes('not found')) {
+      if (
+        message.includes('no YouTube source') ||
+        message.includes('not found') ||
+        message.includes('missing required identifiers')
+      ) {
         return ctx.badRequest(message)
       }
-      return ctx.internalServerError('Synchronization failed')
+      return ctx.internalServerError(message || 'Synchronization failed')
     }
   },
 }))

@@ -76,11 +76,39 @@ export function normalizeYoutubeChannelId(raw: string | null | undefined): strin
   const pathMatch = value.match(/\/channel\/([^/?&#\s]+)/i)
   if (pathMatch?.[1]) return decodeURIComponent(pathMatch[1]).trim()
 
-  return value
+  // Bare UC… ids only — do not treat @handles or other URLs as channel ids.
+  if (/^UC[\w-]{20,}$/.test(value)) return value
+
+  return ''
 }
 
+/** True when the value is already a YouTube channel id (UCxxx). */
+export function isYoutubeChannelId(raw: string | null | undefined): boolean {
+  return /^UC[\w-]{20,}$/.test(String(raw || '').trim())
+}
+
+/**
+ * Extract a @handle / legacy username from a bare handle or channel URL
+ * (e.g. https://www.youtube.com/@anyikowoko/videos → anyikowoko).
+ */
 export function normalizeYoutubeUsername(raw: string | null | undefined): string {
-  return String(raw || '')
-    .trim()
-    .replace(/^@/, '')
+  const value = String(raw || '').trim()
+  if (!value) return ''
+
+  const url = tryUrl(value)
+  if (url) {
+    const parts = url.pathname.split('/').filter(Boolean)
+    const atPart = parts.find((part) => part.startsWith('@'))
+    if (atPart) return atPart.replace(/^@/, '').trim()
+
+    const userIdx = parts.findIndex((part) => part === 'user' || part === 'c')
+    if (userIdx >= 0 && parts[userIdx + 1]) {
+      return parts[userIdx + 1].replace(/^@/, '').trim()
+    }
+  }
+
+  const atMatch = value.match(/@([\w.-]+)/)
+  if (atMatch?.[1]) return atMatch[1].trim()
+
+  return value.replace(/^@/, '').trim()
 }

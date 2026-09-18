@@ -23,7 +23,11 @@
     "active": { "type": "boolean", "default": true },
     "syncEnabled": { "type": "boolean", "default": true },
     "lastSyncedAt": { "type": "datetime" },
-    "syncFrequency": { "type": "string", "default": "hourly" },
+    "syncFrequency": {
+      "type": "enumeration",
+      "enum": ["hourly", "daily", "weekly", "manual"],
+      "default": "hourly"
+    },
     "videosImported": { "type": "integer", "default": 0 },
     "lastSyncStatus": { "type": "string" },
     "syncedVideos": {

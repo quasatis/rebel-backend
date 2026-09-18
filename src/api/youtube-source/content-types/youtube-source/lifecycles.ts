@@ -20,6 +20,14 @@ function normalizeSourceIds(data: Record<string, unknown> | undefined) {
   if ('username' in data && data.username != null) {
     data.username = normalizeYoutubeUsername(String(data.username))
   }
+
+  // Playlist sources are scoped to playlistId only — drop channel/username noise
+  // so the form does not look like a channel sync after save.
+  if (data.sourceType === 'playlist') {
+    data.channelId = null
+    data.channelUrl = null
+    data.username = null
+  }
 }
 
 export default {

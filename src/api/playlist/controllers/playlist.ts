@@ -8,6 +8,17 @@ type YoutubeSourceRef = {
   sourceType?: string | null
 }
 
+type MediaSourceRef = {
+  documentId?: string
+  provider?: string | null
+  externalId?: string | null
+  rawMeta?: {
+    type?: string | null
+    youtubeSourceDocumentId?: string | null
+    youtubeSourceId?: number | null
+  } | null
+}
+
 type SyncedVideoRow = {
   id?: number
   documentId: string
@@ -36,6 +47,27 @@ function serializeVideo(row: SyncedVideoRow) {
     externalUrl: row.externalUrl || null,
     mediaSource: row.mediaSource || null,
   }
+}
+
+/** Resolve the linked YouTube source even when only mediaSource carries the id. */
+function resolveYoutubeSourceRef(
+  youtubeSource: YoutubeSourceRef | null | undefined,
+  mediaSource: MediaSourceRef | null | undefined,
+): { documentId: string; playlistId: string | null } | null {
+  const fromRelation = String(youtubeSource?.documentId || '').trim()
+  const fromMedia = String(mediaSource?.rawMeta?.youtubeSourceDocumentId || '').trim()
+  const documentId = fromRelation || fromMedia
+  if (!documentId) return null
+
+  const playlistId =
+    normalizeYoutubePlaylistId(youtubeSource?.playlistId) ||
+    (mediaSource?.provider === 'youtube' &&
+    (mediaSource.rawMeta?.type === 'playlist' ||
+      /^(PL|UU|OLAK5uy_|RD|FL)/.test(String(mediaSource.externalId || '')))
+      ? normalizeYoutubePlaylistId(mediaSource.externalId)
+      : null)
+
+  return { documentId, playlistId }
 }
 
 function sortByPlaylistPosition(videos: SerializedVideo[]) {
@@ -68,7 +100,7 @@ export default factories.createCoreController('api::playlist.playlist', ({ strap
         active: { $eq: true },
       },
       status: 'published',
-      populate: ['youtubeSource'],
+      populate: ['youtubeSource', 'mediaSource'],
       limit: 1,
     })
 
@@ -78,7 +110,9 @@ export default factories.createCoreController('api::playlist.playlist', ({ strap
     }
 
     const youtubeSource = playlist.youtubeSource as YoutubeSourceRef | null | undefined
-    if (!youtubeSource?.documentId) {
+    const mediaSource = playlist.mediaSource as MediaSourceRef | null | undefined
+    const resolved = resolveYoutubeSourceRef(youtubeSource, mediaSource)
+    if (!resolved?.documentId) {
       ctx.body = { data: [] }
       return
     }
@@ -86,7 +120,7 @@ export default factories.createCoreController('api::playlist.playlist', ({ strap
     const rows = await strapi.documents('api::synced-video.synced-video').findMany({
       filters: {
         youtubeSource: {
-          documentId: { $eq: youtubeSource.documentId },
+          documentId: { $eq: resolved.documentId },
         },
       },
       populate: ['mediaSource'],
@@ -96,7 +130,7 @@ export default factories.createCoreController('api::playlist.playlist', ({ strap
 
     const videos = (rows as unknown as SyncedVideoRow[]).map(serializeVideo)
     const missingPositions = videos.some((video) => typeof video.playlistPosition !== 'number')
-    const playlistId = normalizeYoutubePlaylistId(youtubeSource.playlistId)
+    const playlistId = resolved.playlistId
 
     if (missingPositions && playlistId) {
       try {
