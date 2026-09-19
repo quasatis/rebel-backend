@@ -16,6 +16,7 @@ const CONTENT_UIDS = [
   'api::show.show',
   'api::show-episode.show-episode',
   'api::studio-video.studio-video',
+  'api::studio-genre.studio-genre',
   'api::video-collection.video-collection',
   'api::event.event',
   'api::venue.venue',
@@ -1001,6 +1002,60 @@ async function seedDemoContent(strapi: Core.Strapi) {
   strapi.log.info('Demo content seed complete')
 }
 
+const DEFAULT_STUDIO_GENRES = [
+  { name: 'Music', slug: 'music', sortOrder: 10, railTitle: 'Music & Performance' },
+  { name: 'Film', slug: 'film', sortOrder: 20, railTitle: 'Films' },
+  { name: 'Documentary', slug: 'documentary', sortOrder: 30, railTitle: 'African Stories' },
+  { name: 'Interview', slug: 'interview', sortOrder: 40, railTitle: 'Interviews' },
+  { name: 'Live', slug: 'live', sortOrder: 50, railTitle: 'Live from Africa' },
+] as const
+
+/** Seed studio genres and link videos that still only have the legacy genre enum. */
+async function ensureStudioGenresAndMigrate(strapi: Core.Strapi) {
+  const bySlug = new Map<string, { documentId: string; id: number }>()
+
+  for (const row of DEFAULT_STUDIO_GENRES) {
+    const existing = await strapi.db.query('api::studio-genre.studio-genre').findOne({
+      where: { slug: row.slug },
+    })
+    if (existing) {
+      bySlug.set(row.slug, { documentId: existing.documentId, id: existing.id })
+      continue
+    }
+    const created = await strapi.db.query('api::studio-genre.studio-genre').create({
+      data: {
+        name: row.name,
+        slug: row.slug,
+        sortOrder: row.sortOrder,
+        railTitle: row.railTitle,
+      },
+    })
+    bySlug.set(row.slug, { documentId: created.documentId, id: created.id })
+    strapi.log.info(`Seeded studio genre ${row.slug}`)
+  }
+
+  const videos = await strapi.db.query('api::studio-video.studio-video').findMany({
+    where: { studioGenre: null, genre: { $notNull: true } },
+    limit: 500,
+    select: ['id', 'documentId', 'genre'],
+  })
+
+  let linked = 0
+  for (const video of videos || []) {
+    const slug = typeof video.genre === 'string' ? video.genre : ''
+    const genre = bySlug.get(slug)
+    if (!genre) continue
+    await strapi.db.query('api::studio-video.studio-video').update({
+      where: { id: video.id },
+      data: { studioGenre: genre.id },
+    })
+    linked += 1
+  }
+  if (linked) {
+    strapi.log.info(`Linked ${linked} studio video(s) to studioGenre from legacy genre enum`)
+  }
+}
+
 /** One-shot cleanup for retired seed content editors already tried to delete. */
 async function removeRetiredDemoVideos(strapi: Core.Strapi) {
   const retiredStudioSlugs = ['studio-cut-night-drive']
@@ -1188,6 +1243,16 @@ export default {
 
     await setPublicPermissions(strapi)
     await setAuthenticatedPermissions(strapi)
+
+    try {
+      await ensureStudioGenresAndMigrate(strapi)
+    } catch (error) {
+      strapi.log.warn(
+        `Studio genre ensure/migrate skipped: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      )
+    }
 
     try {
       const existingLaunch = await strapi

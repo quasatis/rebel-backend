@@ -1,0 +1,22 @@
+{
+  "kind": "collectionType",
+  "collectionName": "studio_genres",
+  "info": {
+    "singularName": "studio-genre",
+    "pluralName": "studio-genres",
+    "displayName": "Studio Genre"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "name": { "type": "string", "required": true, "unique": true, "maxLength": 100 },
+    "slug": { "type": "uid", "targetField": "name", "required": true },
+    "railTitle": { "type": "string", "maxLength": 100 },
+    "sortOrder": { "type": "integer", "default": 0 },
+    "videos": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::studio-video.studio-video",
+      "mappedBy": "studioGenre"
+    }
+  }
+}

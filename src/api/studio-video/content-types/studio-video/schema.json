@@ -33,6 +33,12 @@
       "type": "enumeration",
       "enum": ["music", "film", "documentary", "interview", "live"]
     },
+    "studioGenre": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::studio-genre.studio-genre",
+      "inversedBy": "videos"
+    },
     "isOriginal": { "type": "boolean", "default": false },
     "visibility": {
       "type": "enumeration",
