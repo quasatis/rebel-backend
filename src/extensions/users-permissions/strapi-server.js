@@ -11,6 +11,14 @@ module.exports = (plugin) => {
 
   userCt.schema.attributes = {
     ...userCt.schema.attributes,
+    firstName: {
+      type: 'string',
+      configurable: false,
+    },
+    lastName: {
+      type: 'string',
+      configurable: false,
+    },
     inviteTokenHash: {
       type: 'string',
       private: true,

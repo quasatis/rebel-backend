@@ -206,6 +206,8 @@ async function ensureUpUsersColumns(strapi: Core.Strapi) {
     { name: 'confirmationToken', ddl: '`confirmationToken` varchar(255) NULL' },
     { name: 'confirmed', ddl: '`confirmed` tinyint(1) NULL DEFAULT 0' },
     { name: 'blocked', ddl: '`blocked` tinyint(1) NULL DEFAULT 0' },
+    { name: 'firstName', ddl: '`firstName` varchar(255) NULL' },
+    { name: 'lastName', ddl: '`lastName` varchar(255) NULL' },
     { name: 'inviteTokenHash', ddl: '`inviteTokenHash` varchar(255) NULL' },
     { name: 'inviteExpiresAt', ddl: '`inviteExpiresAt` datetime NULL' },
     { name: 'invitePending', ddl: '`invitePending` tinyint(1) NULL DEFAULT 0' },
@@ -233,6 +235,8 @@ async function ensureBackofficeUser(
     email: string
     password: string
     roleId: number
+    firstName?: string
+    lastName?: string
   },
 ) {
   const userService = strapi.plugin('users-permissions').service('user')
@@ -241,6 +245,9 @@ async function ensureBackofficeUser(
       $or: [{ email: data.email }, { username: data.username }],
     },
   })
+
+  const firstName = String(data.firstName || '').trim() || null
+  const lastName = String(data.lastName || '').trim() || null
 
   if (!existing) {
     const created = await userService.add({
@@ -251,10 +258,12 @@ async function ensureBackofficeUser(
       confirmed: true,
       blocked: false,
       role: data.roleId,
+      firstName,
+      lastName,
     })
     await strapi.db.query('plugin::users-permissions.user').update({
       where: { id: created.id },
-      data: { invitePending: false },
+      data: { invitePending: false, firstName, lastName },
     })
     strapi.log.info(`Created backoffice user: ${data.email}`)
     return
@@ -265,6 +274,9 @@ async function ensureBackofficeUser(
   const forcePasswordReset = process.env.FORCE_SEED_USER_PASSWORDS === 'true'
   // Restore credentials after schema/column repair, or when explicitly forced.
   const shouldResetPassword = passwordMissing || providerMissing || forcePasswordReset
+  const needsNameBackfill =
+    Boolean(firstName || lastName) &&
+    (!String(existing.firstName || '').trim() || !String(existing.lastName || '').trim())
 
   const patch: Record<string, unknown> = {
     username: data.username,
@@ -277,11 +289,23 @@ async function ensureBackofficeUser(
   if (shouldResetPassword) {
     patch.password = data.password
   }
+  if (needsNameBackfill) {
+    if (firstName) patch.firstName = firstName
+    if (lastName) patch.lastName = lastName
+  }
 
   await userService.edit(existing.id, patch)
   await strapi.db.query('plugin::users-permissions.user').update({
     where: { id: existing.id },
-    data: { invitePending: false },
+    data: {
+      invitePending: false,
+      ...(needsNameBackfill
+        ? {
+            ...(firstName ? { firstName } : {}),
+            ...(lastName ? { lastName } : {}),
+          }
+        : {}),
+    },
   })
   strapi.log.info(
     shouldResetPassword
@@ -375,18 +399,24 @@ async function seedBackofficeUsers(strapi: Core.Strapi) {
     email: 'admin@rebelafrique.com',
     password: 'RebelAdmin123!',
     roleId: adminRole.id,
+    firstName: 'Admin',
+    lastName: 'Rebel',
   })
   await ensureBackofficeUser(strapi, {
     username: 'editor',
     email: 'editor@rebelafrique.com',
     password: 'RebelEditor123!',
     roleId: editorRole.id,
+    firstName: 'Editor',
+    lastName: 'Rebel',
   })
   await ensureBackofficeUser(strapi, {
     username: 'viewer',
     email: 'viewer@rebelafrique.com',
     password: 'RebelViewer123!',
     roleId: viewerRole.id,
+    firstName: 'Viewer',
+    lastName: 'Rebel',
   })
 }
 

@@ -2,7 +2,8 @@ import crypto from 'node:crypto'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const ASSIGNABLE_ROLE_TYPES = new Set(['admin', 'editor', 'viewer'])
-const MIN_PASSWORD_LENGTH = 10
+const MIN_PASSWORD_LENGTH = 8
+const MAX_PASSWORD_LENGTH = 128
 const INVITE_TTL_MS = 72 * 60 * 60 * 1000
 
 type RoleRow = {
@@ -16,6 +17,8 @@ type UserRow = {
   id: number
   username?: string
   email?: string
+  firstName?: string | null
+  lastName?: string | null
   blocked?: boolean
   confirmed?: boolean
   provider?: string
@@ -44,7 +47,13 @@ function escapeHtml(value: string): string {
 
 function isStrongPassword(password: string): boolean {
   if (password.length < MIN_PASSWORD_LENGTH) return false
-  return /[A-Za-z]/.test(password) && /\d/.test(password)
+  if (password.length > MAX_PASSWORD_LENGTH) return false
+  return (
+    /[A-Z]/.test(password) &&
+    /[a-z]/.test(password) &&
+    /\d/.test(password) &&
+    /[^A-Za-z0-9]/.test(password)
+  )
 }
 
 function hashToken(token: string): string {
@@ -79,6 +88,8 @@ function sanitizeUser(user: UserRow | null | undefined) {
     id: user.id,
     username: user.username,
     email: user.email,
+    firstName: user.firstName || null,
+    lastName: user.lastName || null,
     blocked: Boolean(user.blocked),
     confirmed: Boolean(user.confirmed),
     invitePending: Boolean(user.invitePending),
@@ -94,6 +105,13 @@ function usernameFromEmail(email: string): string {
   const local = email.split('@')[0] || 'user'
   const cleaned = local.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 40)
   return cleaned || 'user'
+}
+
+function normalizeName(value: unknown): string {
+  return String(value || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .slice(0, 100)
 }
 
 function emailConfigured(): boolean {
@@ -126,6 +144,7 @@ function rateLimit(key: string, limit: number, windowMs: number): boolean {
 export default ({ strapi }: { strapi: any }) => ({
   ASSIGNABLE_ROLE_TYPES,
   MIN_PASSWORD_LENGTH,
+  MAX_PASSWORD_LENGTH,
 
   async requireAdmin(ctx: any): Promise<UserRow | null> {
     const authUser = ctx.state?.user
@@ -196,6 +215,8 @@ export default ({ strapi }: { strapi: any }) => ({
               $or: [
                 { email: { $containsi: search } },
                 { username: { $containsi: search } },
+                { firstName: { $containsi: search } },
+                { lastName: { $containsi: search } },
               ],
             },
           ],
@@ -274,8 +295,11 @@ export default ({ strapi }: { strapi: any }) => ({
 
   validatePassword(password: unknown): string | null {
     const value = String(password || '')
+    if (value.length > MAX_PASSWORD_LENGTH) {
+      return `Password must be at most ${MAX_PASSWORD_LENGTH} characters.`
+    }
     if (!isStrongPassword(value)) {
-      return `Password must be at least ${MIN_PASSWORD_LENGTH} characters and include a letter and a number.`
+      return `Password must be at least ${MIN_PASSWORD_LENGTH} characters and include an uppercase letter, a lowercase letter, a number, and a special character.`
     }
     return null
   },
@@ -285,6 +309,14 @@ export default ({ strapi }: { strapi: any }) => ({
     if (!value || !EMAIL_RE.test(value)) return 'Enter a valid email address.'
     return null
   },
+
+  validateName(value: unknown, label: string): string | null {
+    const name = normalizeName(value)
+    if (!name) return `${label} is required.`
+    return null
+  },
+
+  normalizeName,
 
   async emailTaken(email: string, excludeId?: number) {
     const existing = await strapi.db.query('plugin::users-permissions.user').findOne({
@@ -299,6 +331,8 @@ export default ({ strapi }: { strapi: any }) => ({
   async createUser(input: {
     email: string
     username?: string
+    firstName?: string
+    lastName?: string
     password: string
     roleId: number
     blocked?: boolean
@@ -310,6 +344,8 @@ export default ({ strapi }: { strapi: any }) => ({
     const username = await this.ensureUniqueUsername(
       input.username || usernameFromEmail(input.email),
     )
+    const firstName = normalizeName(input.firstName)
+    const lastName = normalizeName(input.lastName)
 
     const created = await userService.add({
       username,
@@ -319,12 +355,16 @@ export default ({ strapi }: { strapi: any }) => ({
       confirmed: true,
       blocked: Boolean(input.blocked),
       role: input.roleId,
+      firstName: firstName || null,
+      lastName: lastName || null,
     })
 
     // Custom invite fields via query (keeps hashed password hashing in userService.add).
     await strapi.db.query('plugin::users-permissions.user').update({
       where: { id: created.id },
       data: {
+        firstName: firstName || null,
+        lastName: lastName || null,
         invitePending: Boolean(input.invitePending),
         inviteTokenHash: input.inviteTokenHash || null,
         inviteExpiresAt: input.inviteExpiresAt || null,
@@ -433,7 +473,7 @@ export default ({ strapi }: { strapi: any }) => ({
   },
 
   randomPassword() {
-    return crypto.randomBytes(24).toString('base64url') + 'Aa1'
+    return crypto.randomBytes(24).toString('base64url') + 'Aa1!'
   },
 
   normalizeEmail,

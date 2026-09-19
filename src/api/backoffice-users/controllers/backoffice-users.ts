@@ -42,6 +42,12 @@ export default ({ strapi }: { strapi: any }) => {
       const emailError = service().validateEmail(data.email)
       if (emailError) return ctx.badRequest(emailError)
 
+      const firstNameError = service().validateName(data.firstName, 'First name')
+      if (firstNameError) return ctx.badRequest(firstNameError)
+
+      const lastNameError = service().validateName(data.lastName, 'Last name')
+      if (lastNameError) return ctx.badRequest(lastNameError)
+
       const passwordError = service().validatePassword(data.password)
       if (passwordError) return ctx.badRequest(passwordError)
 
@@ -60,6 +66,8 @@ export default ({ strapi }: { strapi: any }) => {
       const created = await service().createUser({
         email,
         username,
+        firstName: service().normalizeName(data.firstName),
+        lastName: service().normalizeName(data.lastName),
         password: String(data.password),
         roleId: role.id,
         blocked: false,
@@ -97,6 +105,18 @@ export default ({ strapi }: { strapi: any }) => {
         const username = String(data.username).trim()
         if (!username) return ctx.badRequest('Username is required.')
         patch.username = await service().ensureUniqueUsername(username, id)
+      }
+
+      if (data.firstName != null) {
+        const firstNameError = service().validateName(data.firstName, 'First name')
+        if (firstNameError) return ctx.badRequest(firstNameError)
+        patch.firstName = service().normalizeName(data.firstName)
+      }
+
+      if (data.lastName != null) {
+        const lastNameError = service().validateName(data.lastName, 'Last name')
+        if (lastNameError) return ctx.badRequest(lastNameError)
+        patch.lastName = service().normalizeName(data.lastName)
       }
 
       let nextRole = existing.role && typeof existing.role === 'object' ? existing.role : null
@@ -176,6 +196,12 @@ export default ({ strapi }: { strapi: any }) => {
       const emailError = service().validateEmail(data.email)
       if (emailError) return ctx.badRequest(emailError)
 
+      const firstNameError = service().validateName(data.firstName, 'First name')
+      if (firstNameError) return ctx.badRequest(firstNameError)
+
+      const lastNameError = service().validateName(data.lastName, 'Last name')
+      if (lastNameError) return ctx.badRequest(lastNameError)
+
       const role = await service().resolveAssignableRole(data.roleId ?? data.role)
       if (!role) return ctx.badRequest('Choose a valid role (Admin, Editor, or Viewer).')
 
@@ -193,6 +219,8 @@ export default ({ strapi }: { strapi: any }) => {
           username: data.username
             ? String(data.username).trim()
             : service().usernameFromEmail(email),
+          firstName: service().normalizeName(data.firstName),
+          lastName: service().normalizeName(data.lastName),
           password: service().randomPassword(),
           roleId: role.id,
           blocked: true,
