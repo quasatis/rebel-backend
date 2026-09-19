@@ -3,7 +3,7 @@ import { errors } from '@strapi/utils'
 import { sanitizeMediaFolder } from '../../../utils/media-folders'
 
 const FILE_MODEL_UID = 'plugin::upload.file'
-const MAX_UPLOAD_MB = 10
+const MAX_UPLOAD_MB = 2
 const MAX_UPLOAD_BYTES = MAX_UPLOAD_MB * 1024 * 1024
 
 function assertWithinSizeLimit(files: unknown) {

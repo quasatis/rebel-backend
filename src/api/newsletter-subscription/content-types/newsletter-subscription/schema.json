@@ -10,6 +10,8 @@
   "attributes": {
     "email": { "type": "email", "required": true, "unique": true },
     "source": { "type": "string", "default": "website" },
-    "active": { "type": "boolean", "default": true }
+    "active": { "type": "boolean", "default": true },
+    "unsubscribeToken": { "type": "string", "unique": true },
+    "unsubscribedAt": { "type": "datetime" }
   }
 }

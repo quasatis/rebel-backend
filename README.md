@@ -33,6 +33,7 @@ Generate unique values for `APP_KEYS`, `API_TOKEN_SALT`, `ADMIN_JWT_SECRET`, `TR
 | `BREVO_API_KEY` | Brevo Transactional API key (preferred email provider) |
 | `BREVO_SENDER_EMAIL` / `BREVO_SENDER_NAME` | Brevo default from address / display name |
 | `BACKOFFICE_URL` | Backoffice origin for invite magic links (e.g. `http://localhost:3001`) |
+| `FRONTOFFICE_URL` | Public site origin for newsletter unsubscribe links (e.g. `http://localhost:3000`) |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | Fallback Nodemailer SMTP when Brevo is unset |
 | `NETLIFY_BUILD_HOOK_URL` | Trigger frontend rebuilds |
 | `CORS_ORIGIN` | Comma-separated frontend origins |

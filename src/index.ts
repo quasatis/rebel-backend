@@ -27,6 +27,7 @@ const CONTENT_UIDS = [
   'api::about-page.about-page',
   'api::newsletter-config.newsletter-config',
   'api::newsletter-subscription.newsletter-subscription',
+  'api::newsletter-campaign.newsletter-campaign',
   'api::contact-message.contact-message',
   'api::media-traffic-event.media-traffic-event',
   'api::synced-video.synced-video',
@@ -65,6 +66,7 @@ async function setPublicPermissions(strapi: Core.Strapi) {
   // MediaSource stays public so FO can populate embeds on published content.
   const publicDenied = new Set([
     'api::newsletter-subscription.newsletter-subscription',
+    'api::newsletter-campaign.newsletter-campaign',
     'api::contact-message.contact-message',
     'api::media-traffic-event.media-traffic-event',
     'api::youtube-source.youtube-source',
@@ -92,6 +94,11 @@ async function setPublicPermissions(strapi: Core.Strapi) {
     strapi,
     publicRole.id,
     'api::newsletter-subscription.newsletter-subscription.create',
+  )
+  await ensurePermission(
+    strapi,
+    publicRole.id,
+    'api::newsletter-subscription.newsletter-subscription.unsubscribe',
   )
   await ensurePermission(
     strapi,
@@ -147,6 +154,14 @@ async function setRoleContentPermissions(
       roleId,
       'api::document-actions.document-actions.previewToken',
     )
+    await ensurePermission(strapi, roleId, 'api::newsletter-campaign.newsletter-campaign.send')
+    await ensurePermission(strapi, roleId, 'api::newsletter-campaign.newsletter-campaign.schedule')
+    await ensurePermission(
+      strapi,
+      roleId,
+      'api::newsletter-campaign.newsletter-campaign.cancelSchedule',
+    )
+    await ensurePermission(strapi, roleId, 'api::newsletter-campaign.newsletter-campaign.testSend')
   }
 }
 

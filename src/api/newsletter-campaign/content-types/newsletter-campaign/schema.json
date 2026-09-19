@@ -1,0 +1,57 @@
+{
+  "kind": "collectionType",
+  "collectionName": "newsletter_campaigns",
+  "info": {
+    "singularName": "newsletter-campaign",
+    "pluralName": "newsletter-campaigns",
+    "displayName": "Newsletter Campaign",
+    "description": "Compose and send newsletter blasts to active subscribers"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "attributes": {
+    "subject": {
+      "type": "string",
+      "required": true,
+      "maxLength": 100
+    },
+    "previewText": {
+      "type": "string",
+      "maxLength": 200
+    },
+    "content": {
+      "type": "blocks"
+    },
+    "status": {
+      "type": "enumeration",
+      "enum": ["draft", "scheduled", "sending", "sent", "failed", "cancelled"],
+      "default": "draft",
+      "required": true
+    },
+    "scheduledSendAt": {
+      "type": "datetime"
+    },
+    "sentAt": {
+      "type": "datetime"
+    },
+    "recipientCount": {
+      "type": "integer",
+      "default": 0,
+      "min": 0
+    },
+    "successCount": {
+      "type": "integer",
+      "default": 0,
+      "min": 0
+    },
+    "failureCount": {
+      "type": "integer",
+      "default": 0,
+      "min": 0
+    },
+    "lastError": {
+      "type": "text"
+    }
+  }
+}

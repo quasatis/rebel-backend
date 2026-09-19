@@ -42,6 +42,25 @@ export default ({ env }) => ({
           rule: env('SCHEDULED_PUBLISH_CRON', '* * * * *'),
         },
       },
+      scheduledNewsletterCampaigns: {
+        task: async ({ strapi }) => {
+          try {
+            const { sendDueNewsletterCampaigns } = await import(
+              '../src/utils/scheduled-newsletter-campaigns'
+            )
+            await sendDueNewsletterCampaigns(strapi)
+          } catch (error) {
+            strapi.log.error(
+              `Scheduled newsletter campaigns failed: ${
+                error instanceof Error ? error.message : String(error)
+              }`,
+            )
+          }
+        },
+        options: {
+          rule: env('SCHEDULED_NEWSLETTER_CRON', '* * * * *'),
+        },
+      },
     },
   },
 })

@@ -68,12 +68,14 @@ export default ({ env }) => ({
       : {}),
   upload: {
     config: {
-      sizeLimit: 10 * 1024 * 1024, // 10 MB
+      sizeLimit: 2 * 1024 * 1024, // 2 MB
       provider: 'cloudinary',
       providerOptions: {
         cloud_name: env('CLOUDINARY_NAME'),
         api_key: env('CLOUDINARY_KEY'),
         api_secret: env('CLOUDINARY_SECRET'),
+        // Docker Desktop on Windows can be slow to Cloudinary; default ~60s is tight.
+        timeout: env.int('CLOUDINARY_TIMEOUT_MS', 120_000),
       },
       actionOptions: {
         upload: { folder: 'General', agent: cloudinaryAgent },
