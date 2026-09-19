@@ -34,6 +34,16 @@ export default {
       },
     },
     {
+      method: 'GET',
+      path: '/mfa/me',
+      handler: 'mfa.me',
+      config: {
+        policies: [],
+        middlewares: [],
+        auth: { scope: ['plugin::users-permissions.user.me'] },
+      },
+    },
+    {
       method: 'POST',
       path: '/mfa/totp/setup',
       handler: 'mfa.totpSetup',

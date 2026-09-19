@@ -158,6 +158,13 @@ export default ({ strapi }: { strapi: any }) => {
       ctx.body = { data: svc.statusPayload(user) }
     },
 
+    async me(ctx: any) {
+      const svc = service()
+      const user = await svc.requireAuthUser(ctx)
+      if (!user) return
+      ctx.body = { data: svc.publicUser(user) }
+    },
+
     async totpSetup(ctx: any) {
       const svc = service()
       const user = await svc.requireAuthUser(ctx)
