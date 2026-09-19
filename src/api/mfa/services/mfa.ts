@@ -41,7 +41,7 @@ export type MfaUser = {
   role?: RoleRow | number | null
 }
 
-const ISSUER = 'REBEL AFRIQUE Backoffice'
+const ISSUER = 'RebelAfrique'
 
 /** Simple in-memory rate limit (per process). */
 const rateBuckets = new Map<string, number[]>()
@@ -178,16 +178,27 @@ export default ({ strapi }: { strapi: any }) => {
 
   async function verifyTotpCode(user: MfaUser, code: string): Promise<boolean> {
     if (!user.totpSecretEnc) return false
+    const token = String(code || '')
+      .replace(/\D/g, '')
+      .slice(-6)
+      .padStart(6, '0')
+    if (!/^\d{6}$/.test(token)) return false
     try {
       const { verify } = await import('otplib')
       const secret = decryptSecret(user.totpSecretEnc)
+      // ±90s covers phone/server clock skew across a couple of TOTP windows.
       const result = await verify({
         secret,
-        token: String(code || '').trim(),
-        epochTolerance: 30,
+        token,
+        epochTolerance: 90,
       })
       return Boolean(result?.valid)
-    } catch {
+    } catch (error) {
+      strapi.log.warn(
+        `TOTP verify failed for user ${user.id}: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      )
       return false
     }
   }
