@@ -85,6 +85,23 @@ async function filterPublishedRelated(
 }
 
 export default ({ strapi }: { strapi: any }) => ({
+  async publish(ctx: any) {
+    const { collection, documentId } = ctx.params || {}
+    if (!ctx.state?.user) {
+      return ctx.unauthorized('Authentication required')
+    }
+
+    const uid = resolveDraftPublishUid(strapi, collection, documentId)
+    const published = await strapi.documents(uid).publish({ documentId: String(documentId) })
+    const entry = Array.isArray(published) ? published[0] : published
+    ctx.body = {
+      data: {
+        documentId: String(documentId),
+        publishedAt: entry?.publishedAt || new Date().toISOString(),
+      },
+    }
+  },
+
   async unpublish(ctx: any) {
     const { collection, documentId } = ctx.params || {}
     if (!ctx.state?.user) {

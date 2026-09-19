@@ -29,6 +29,16 @@ export type NormalizedYoutubeVideo = {
   }
 }
 
+/** Match show-episode / media-source schema maxLength so sync does not 400/500. */
+const TITLE_MAX = 100
+const DESCRIPTION_MAX = 2000
+
+function clip(value: unknown, max: number): string {
+  const text = String(value ?? '')
+  if (text.length <= max) return text
+  return text.slice(0, max)
+}
+
 export default () => ({
   normalize(item: YoutubeListItem, attribution: YoutubeAttribution = {}): NormalizedYoutubeVideo {
     const externalUrl = `https://www.youtube.com/watch?v=${item.id}`
@@ -36,13 +46,15 @@ export default () => ({
     const channelUrl =
       String(attribution.channelUrl || '').trim() ||
       (channelId ? `https://www.youtube.com/channel/${channelId}` : null)
+    const title = clip(item.title, TITLE_MAX)
+    const description = clip(item.description, DESCRIPTION_MAX)
     return {
       youtubeVideoId: item.id,
-      title: item.title,
-      description: item.description,
+      title,
+      description,
       thumbnailUrl: item.thumbnailUrl,
       publishedAt: item.publishedAt,
-      channelTitle: item.channelTitle,
+      channelTitle: clip(item.channelTitle, TITLE_MAX),
       durationSeconds: item.durationSeconds,
       playlistPosition: item.playlistPosition,
       externalUrl,
@@ -50,7 +62,7 @@ export default () => ({
         provider: 'youtube',
         externalId: item.id,
         externalUrl,
-        title: item.title,
+        title,
         thumbnailUrl: item.thumbnailUrl,
         durationSeconds: item.durationSeconds,
         providerExternalKey: `youtube:${item.id}`,

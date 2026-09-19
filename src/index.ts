@@ -143,6 +143,7 @@ async function setRoleContentPermissions(
     await ensurePermission(strapi, roleId, 'api::show.show.sync')
     await ensurePermission(strapi, roleId, 'plugin::upload.content-api.upload')
     await ensurePermission(strapi, roleId, 'api::media-upload.media-upload.upload')
+    await ensurePermission(strapi, roleId, 'api::document-actions.document-actions.publish')
     await ensurePermission(strapi, roleId, 'api::document-actions.document-actions.unpublish')
     await ensurePermission(
       strapi,

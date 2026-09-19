@@ -7,6 +7,15 @@ export default {
   routes: [
     {
       method: 'POST',
+      path: '/document-actions/:collection/:documentId/publish',
+      handler: 'document-actions.publish',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
+    {
+      method: 'POST',
       path: '/document-actions/:collection/:documentId/unpublish',
       handler: 'document-actions.unpublish',
       config: {
