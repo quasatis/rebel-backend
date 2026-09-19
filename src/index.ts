@@ -211,6 +211,12 @@ async function ensureUpUsersColumns(strapi: Core.Strapi) {
     { name: 'inviteTokenHash', ddl: '`inviteTokenHash` varchar(255) NULL' },
     { name: 'inviteExpiresAt', ddl: '`inviteExpiresAt` datetime NULL' },
     { name: 'invitePending', ddl: '`invitePending` tinyint(1) NULL DEFAULT 0' },
+    { name: 'totpSecretEnc', ddl: '`totpSecretEnc` longtext NULL' },
+    { name: 'totpEnabled', ddl: '`totpEnabled` tinyint(1) NULL DEFAULT 0' },
+    { name: 'emailMfaEnabled', ddl: '`emailMfaEnabled` tinyint(1) NULL DEFAULT 0' },
+    { name: 'backupCodesHash', ddl: '`backupCodesHash` longtext NULL' },
+    { name: 'emailOtpHash', ddl: '`emailOtpHash` varchar(255) NULL' },
+    { name: 'emailOtpExpiresAt', ddl: '`emailOtpExpiresAt` datetime NULL' },
   ]
 
   for (const column of columns) {

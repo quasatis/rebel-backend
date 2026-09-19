@@ -35,6 +35,39 @@ module.exports = (plugin) => {
       default: false,
       configurable: false,
     },
+    totpSecretEnc: {
+      type: 'text',
+      private: true,
+      configurable: false,
+      searchable: false,
+    },
+    totpEnabled: {
+      type: 'boolean',
+      default: false,
+      configurable: false,
+    },
+    emailMfaEnabled: {
+      type: 'boolean',
+      default: false,
+      configurable: false,
+    },
+    backupCodesHash: {
+      type: 'text',
+      private: true,
+      configurable: false,
+      searchable: false,
+    },
+    emailOtpHash: {
+      type: 'string',
+      private: true,
+      configurable: false,
+      searchable: false,
+    },
+    emailOtpExpiresAt: {
+      type: 'datetime',
+      private: true,
+      configurable: false,
+    },
   }
 
   return plugin
