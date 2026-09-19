@@ -6,8 +6,16 @@ RUN apk update && apk add --no-cache \
 WORKDIR /opt/app
 
 COPY package.json package-lock.json* ./
+COPY providers ./providers
 RUN npm install --omit=dev=false
 
+COPY tsconfig.json ./
+COPY config ./config
+COPY src ./src
+COPY database ./database
+COPY public ./public
+COPY favicon.png ./
+COPY scripts ./scripts
 COPY . .
 
 # Dummy secrets so `strapi build` can compile admin without real production keys
@@ -46,4 +54,4 @@ ENV NODE_OPTIONS="--dns-result-order=ipv4first --no-network-family-autoselection
 USER strapi
 EXPOSE 1337
 
-CMD ["npm", "run", "start"]
+CMD ["node", "scripts/docker-entrypoint.js", "npm", "run", "start"]

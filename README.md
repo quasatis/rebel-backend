@@ -30,7 +30,10 @@ Generate unique values for `APP_KEYS`, `API_TOKEN_SALT`, `ADMIN_JWT_SECRET`, `TR
 | `CLOUDINARY_SECRET` | Cloudinary API secret |
 | `YOUTUBE_API_KEY` | YouTube Data API v3 key |
 | `CONTACT_TO` / `CONTACT_FROM` | Contact form recipient / sender (default `team@quasatis.com`) |
-| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | Nodemailer SMTP for contact emails |
+| `BREVO_API_KEY` | Brevo Transactional API key (preferred email provider) |
+| `BREVO_SENDER_EMAIL` / `BREVO_SENDER_NAME` | Brevo default from address / display name |
+| `BACKOFFICE_URL` | Backoffice origin for invite magic links (e.g. `http://localhost:3001`) |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` | Fallback Nodemailer SMTP when Brevo is unset |
 | `NETLIFY_BUILD_HOOK_URL` | Trigger frontend rebuilds |
 | `CORS_ORIGIN` | Comma-separated frontend origins |
 
@@ -46,11 +49,11 @@ docker compose up --build -d
 
 4. Open (default Docker host mappings avoid busy local ports):
 
-- Admin: http://localhost:1338/admin
-- API: http://localhost:1338/api
+- Admin: http://localhost:1337/admin
+- API: http://localhost:1337/api
 - MySQL host port: `3307` → container `3306`
 
-Create the first Strapi **Admin** user at http://localhost:1338/admin (system admin).
+Create the first Strapi **Admin** user at http://localhost:1337/admin (system admin).
 
 Bootstrap always creates Users & Permissions roles/users for the custom backoffice (`:3001/login` — not Strapi Admin):
 
@@ -60,7 +63,9 @@ Bootstrap always creates Users & Permissions roles/users for the custom backoffi
 | Editor | `editor@rebelafrique.com` | `RebelEditor123!` |
 | Viewer (read-only) | `viewer@rebelafrique.com` | `RebelViewer123!` |
 
-Strapi **Admin** (system) remains at http://localhost:1338/admin and is separate from these accounts.
+Seeded accounts are create-if-missing: passwords are kept across restarts unless the account is missing `provider`/`password` (e.g. after a DB repair), or you set `FORCE_SEED_USER_PASSWORDS=true`. Admins manage additional users from the custom backoffice **Users** page (invite magic links via Brevo when `BREVO_API_KEY` is set).
+
+Strapi **Admin** (system) remains at http://localhost:1337/admin and is separate from these accounts.
 
 When `SEED_DEMO_CONTENT=true`, bootstrap also creates demo editorial content (article, artist, release, studio video, event, homepage feature).
 

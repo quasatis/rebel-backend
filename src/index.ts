@@ -171,6 +171,61 @@ async function ensureRole(
   return strapi.db.query('plugin::users-permissions.role').create({ data })
 }
 
+/**
+ * Repair up_users columns that may have been dropped when a shallow schema.json
+ * extension replaced Users & Permissions attributes.
+ */
+async function ensureUpUsersColumns(strapi: Core.Strapi) {
+  const knex = strapi.db.connection
+  const database = knex.client?.database?.() || process.env.DATABASE_NAME || 'rebelafrique'
+
+  let existing: Set<string>
+  try {
+    const rows = await knex('information_schema.COLUMNS')
+      .where({ TABLE_SCHEMA: database, TABLE_NAME: 'up_users' })
+      .select('COLUMN_NAME')
+    existing = new Set(rows.map((row: { COLUMN_NAME: string }) => row.COLUMN_NAME))
+  } catch (error) {
+    strapi.log.warn(
+      `Could not inspect up_users columns: ${
+        error instanceof Error ? error.message : 'unknown'
+      }`,
+    )
+    return
+  }
+
+  if (!existing.size) {
+    strapi.log.warn('up_users table not found yet; skipping column repair.')
+    return
+  }
+
+  const columns: Array<{ name: string; ddl: string }> = [
+    { name: 'provider', ddl: '`provider` varchar(255) NULL' },
+    { name: 'password', ddl: '`password` varchar(255) NULL' },
+    { name: 'resetPasswordToken', ddl: '`resetPasswordToken` varchar(255) NULL' },
+    { name: 'confirmationToken', ddl: '`confirmationToken` varchar(255) NULL' },
+    { name: 'confirmed', ddl: '`confirmed` tinyint(1) NULL DEFAULT 0' },
+    { name: 'blocked', ddl: '`blocked` tinyint(1) NULL DEFAULT 0' },
+    { name: 'inviteTokenHash', ddl: '`inviteTokenHash` varchar(255) NULL' },
+    { name: 'inviteExpiresAt', ddl: '`inviteExpiresAt` datetime NULL' },
+    { name: 'invitePending', ddl: '`invitePending` tinyint(1) NULL DEFAULT 0' },
+  ]
+
+  for (const column of columns) {
+    if (existing.has(column.name)) continue
+    try {
+      await knex.raw(`ALTER TABLE \`up_users\` ADD COLUMN ${column.ddl}`)
+      strapi.log.info(`Restored missing up_users.${column.name} column`)
+    } catch (error) {
+      strapi.log.warn(
+        `Could not add up_users.${column.name}: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      )
+    }
+  }
+}
+
 async function ensureBackofficeUser(
   strapi: Core.Strapi,
   data: {
@@ -188,7 +243,7 @@ async function ensureBackofficeUser(
   })
 
   if (!existing) {
-    await userService.add({
+    const created = await userService.add({
       username: data.username,
       email: data.email,
       password: data.password,
@@ -197,32 +252,58 @@ async function ensureBackofficeUser(
       blocked: false,
       role: data.roleId,
     })
+    await strapi.db.query('plugin::users-permissions.user').update({
+      where: { id: created.id },
+      data: { invitePending: false },
+    })
     strapi.log.info(`Created backoffice user: ${data.email}`)
     return
   }
 
-  await userService.edit(existing.id, {
+  const providerMissing = !existing.provider || String(existing.provider).trim() === ''
+  const passwordMissing = !existing.password
+  const forcePasswordReset = process.env.FORCE_SEED_USER_PASSWORDS === 'true'
+  // Restore credentials after schema/column repair, or when explicitly forced.
+  const shouldResetPassword = passwordMissing || providerMissing || forcePasswordReset
+
+  const patch: Record<string, unknown> = {
     username: data.username,
     email: data.email,
-    password: data.password,
     provider: 'local',
     confirmed: true,
     blocked: false,
     role: data.roleId,
+  }
+  if (shouldResetPassword) {
+    patch.password = data.password
+  }
+
+  await userService.edit(existing.id, patch)
+  await strapi.db.query('plugin::users-permissions.user').update({
+    where: { id: existing.id },
+    data: { invitePending: false },
   })
-  strapi.log.info(`Updated backoffice user: ${data.email}`)
+  strapi.log.info(
+    shouldResetPassword
+      ? `Repaired backoffice user credentials: ${data.email}`
+      : `Updated backoffice user (password kept): ${data.email}`,
+  )
 }
 
 async function seedBackofficeUsers(strapi: Core.Strapi) {
-  // Strapi local auth looks up users with provider='local'. Missing provider => 400.
-  const missingProvider = await strapi.db.query('plugin::users-permissions.user').findMany({
-    where: { provider: { $null: true } },
-  })
-  for (const user of missingProvider) {
-    await strapi.db.query('plugin::users-permissions.user').update({
-      where: { id: user.id },
-      data: { provider: 'local' },
-    })
+  await ensureUpUsersColumns(strapi)
+
+  // Strapi local auth requires provider='local'. Backfill null/empty after column repair.
+  try {
+    const knex = strapi.db.connection
+    await knex('up_users')
+      .whereNull('provider')
+      .orWhere('provider', '')
+      .update({ provider: 'local' })
+  } catch (error) {
+    strapi.log.warn(
+      `Provider backfill skipped: ${error instanceof Error ? error.message : 'unknown'}`,
+    )
   }
 
   const adminRole = await ensureRole(strapi, {
@@ -247,6 +328,47 @@ async function seedBackofficeUsers(strapi: Core.Strapi) {
   // Editors can manage sources, but only admins may delete them.
   await revokePermission(strapi, editorRole.id, 'api::youtube-source.youtube-source.delete')
   await ensurePermission(strapi, adminRole.id, 'api::youtube-source.youtube-source.delete')
+
+  const adminUserActions = [
+    'api::backoffice-users.backoffice-users.find',
+    'api::backoffice-users.backoffice-users.findOne',
+    'api::backoffice-users.backoffice-users.roles',
+    'api::backoffice-users.backoffice-users.create',
+    'api::backoffice-users.backoffice-users.update',
+    'api::backoffice-users.backoffice-users.resetPassword',
+    'api::backoffice-users.backoffice-users.invite',
+    'api::backoffice-users.backoffice-users.resendInvite',
+  ]
+  for (const action of adminUserActions) {
+    await ensurePermission(strapi, adminRole.id, action)
+    await revokePermission(strapi, editorRole.id, action)
+    await revokePermission(strapi, viewerRole.id, action)
+  }
+
+  const publicRole = await strapi.db.query('plugin::users-permissions.role').findOne({
+    where: { type: 'public' },
+  })
+  if (publicRole) {
+    await ensurePermission(
+      strapi,
+      publicRole.id,
+      'api::backoffice-users.backoffice-users.inviteStatus',
+    )
+    await ensurePermission(
+      strapi,
+      publicRole.id,
+      'api::backoffice-users.backoffice-users.acceptInvite',
+    )
+  }
+
+  const authRole = await strapi.db.query('plugin::users-permissions.role').findOne({
+    where: { type: 'authenticated' },
+  })
+  if (authRole) {
+    for (const action of adminUserActions) {
+      await revokePermission(strapi, authRole.id, action)
+    }
+  }
 
   await ensureBackofficeUser(strapi, {
     username: 'admin',
@@ -1000,6 +1122,17 @@ export default {
   register() {},
 
   async bootstrap({ strapi }: { strapi: Core.Strapi }) {
+    // Repair up_users before any auth/permission work that reads users.
+    try {
+      await ensureUpUsersColumns(strapi)
+    } catch (error) {
+      strapi.log.warn(
+        `up_users column repair skipped: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      )
+    }
+
     await setPublicPermissions(strapi)
     await setAuthenticatedPermissions(strapi)
 

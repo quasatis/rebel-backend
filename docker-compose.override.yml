@@ -7,19 +7,23 @@
 #   docker compose -f docker-compose.yml up -d --build strapi
 services:
   strapi:
-    command: ["npm", "run", "develop"]
+    command: ["node", "scripts/docker-entrypoint.js", "npm", "run", "develop"]
     environment:
       # `strapi develop` disables autoReload under NODE_ENV=production.
       NODE_ENV: development
       NODE_OPTIONS: --dns-result-order=ipv4first --no-network-family-autoselection
       # Windows bind mounts don't forward inotify events, so watch by polling.
+      # A slightly slower interval avoids false "file deleted" storms that make
+      # `tsc` run against an empty tree (TS18003) and crash the worker.
       CHOKIDAR_USEPOLLING: "true"
-      CHOKIDAR_INTERVAL: "400"
+      CHOKIDAR_INTERVAL: "1000"
     volumes:
       # node_modules stays the image's Linux-built copy — never mount the host's.
       - ./src:/opt/app/src
       - ./config:/opt/app/config
       - ./database:/opt/app/database
+      - ./tsconfig.json:/opt/app/tsconfig.json
+      - ./scripts/docker-entrypoint.js:/opt/app/scripts/docker-entrypoint.js
     healthcheck:
       # Dev boot also compiles the admin panel, so allow a longer warm-up.
       start_period: 240s

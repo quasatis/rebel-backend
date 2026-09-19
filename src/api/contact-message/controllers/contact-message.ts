@@ -44,8 +44,13 @@ export default factories.createCoreController(
       if (message.length > MAX_MESSAGE) return ctx.badRequest('Message is too long.')
 
       const to = String(process.env.CONTACT_TO || 'team@quasatis.com').trim()
-      const from = String(process.env.CONTACT_FROM || 'team@quasatis.com').trim()
-      const smtpHost = String(process.env.SMTP_HOST || '').trim()
+      const from = String(
+        process.env.BREVO_SENDER_EMAIL || process.env.CONTACT_FROM || 'team@quasatis.com',
+      ).trim()
+      const emailConfigured = Boolean(
+        String(process.env.BREVO_API_KEY || '').trim() ||
+          String(process.env.SMTP_HOST || '').trim(),
+      )
 
       const created = await strapi.documents('api::contact-message.contact-message').create({
         data: {
@@ -57,9 +62,9 @@ export default factories.createCoreController(
         } as never,
       })
 
-      if (!smtpHost) {
+      if (!emailConfigured) {
         strapi.log.warn(
-          'CONTACT_TO ready but SMTP_HOST is not set — contact message stored, email not sent.',
+          'CONTACT_TO ready but BREVO_API_KEY/SMTP_HOST is not set — contact message stored, email not sent.',
         )
         ctx.status = 503
         ctx.body = {

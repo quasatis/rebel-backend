@@ -1,21 +1,18 @@
 {
+  "extends": "@strapi/typescript-utils/tsconfigs/server",
   "compilerOptions": {
-    "module": "CommonJS",
-    "moduleResolution": "node",
-    "lib": ["ES2020"],
-    "target": "ES2019",
-    "strict": false,
-    "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true,
-    "incremental": true,
-    "esModuleInterop": true,
-    "resolveJsonModule": true,
-    "noEmitOnError": true,
-    "noImplicitThis": true,
     "outDir": "dist",
-    "rootDir": "."
+    "rootDir": ".",
+    "allowJs": true,
+    "tsBuildInfoFile": "./dist/.tsbuildinfo"
   },
-  "include": ["./", "./**/*.ts", "./**/*.js", "src/**/*.json"],
+  "include": [
+    "./src/**/*.ts",
+    "./src/**/*.js",
+    "./config/**/*.ts",
+    "./database/**/*.ts",
+    "./src/**/*.json"
+  ],
   "exclude": [
     "node_modules/",
     "build/",
@@ -23,6 +20,7 @@
     ".cache/",
     ".tmp/",
     "src/admin/",
+    "src/plugins/**",
     "types/generated/",
     "**/*.test.*"
   ]

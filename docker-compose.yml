@@ -43,7 +43,7 @@ services:
     volumes:
       - strapi_uploads:/opt/app/public/uploads
     ports:
-      - "1338:1337"
+      - "1337:1337"
     depends_on:
       mysql:
         condition: service_healthy
