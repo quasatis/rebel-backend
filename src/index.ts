@@ -1034,25 +1034,33 @@ async function ensureStudioGenresAndMigrate(strapi: Core.Strapi) {
     strapi.log.info(`Seeded studio genre ${row.slug}`)
   }
 
+  // Link from legacy `genre` enum → `studioGenres` (many-to-many). Do not
+  // reference the retired `studioGenre` column — it no longer exists.
   const videos = await strapi.db.query('api::studio-video.studio-video').findMany({
-    where: { studioGenre: null, genre: { $notNull: true } },
+    where: { genre: { $notNull: true } },
     limit: 500,
-    select: ['id', 'documentId', 'genre'],
+    populate: { studioGenres: true },
   })
 
   let linked = 0
   for (const video of videos || []) {
     const slug = typeof video.genre === 'string' ? video.genre : ''
     const genre = bySlug.get(slug)
-    if (!genre) continue
+    if (!genre || video.id == null) continue
+    const existing = Array.isArray(video.studioGenres)
+      ? video.studioGenres
+          .map((row: { id?: number }) => row?.id)
+          .filter((id: number | undefined): id is number => typeof id === 'number')
+      : []
+    if (existing.includes(genre.id)) continue
     await strapi.db.query('api::studio-video.studio-video').update({
       where: { id: video.id },
-      data: { studioGenre: genre.id },
+      data: { studioGenres: [...existing, genre.id] },
     })
     linked += 1
   }
   if (linked) {
-    strapi.log.info(`Linked ${linked} studio video(s) to studioGenre from legacy genre enum`)
+    strapi.log.info(`Linked ${linked} studio video(s) to studioGenres from legacy genre enum`)
   }
 }
 

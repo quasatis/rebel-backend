@@ -14,9 +14,9 @@
     "sortOrder": { "type": "integer", "default": 0 },
     "videos": {
       "type": "relation",
-      "relation": "oneToMany",
+      "relation": "manyToMany",
       "target": "api::studio-video.studio-video",
-      "mappedBy": "studioGenre"
+      "mappedBy": "studioGenres"
     }
   }
 }

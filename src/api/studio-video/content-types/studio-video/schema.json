@@ -33,9 +33,9 @@
       "type": "enumeration",
       "enum": ["music", "film", "documentary", "interview", "live"]
     },
-    "studioGenre": {
+    "studioGenres": {
       "type": "relation",
-      "relation": "manyToOne",
+      "relation": "manyToMany",
       "target": "api::studio-genre.studio-genre",
       "inversedBy": "videos"
     },

@@ -209,7 +209,7 @@ export default ({ strapi }: { strapi: any }) => ({
                 { title: contains },
                 { description: contains },
                 { genre: contains },
-                { studioGenre: { name: contains } },
+                { studioGenres: { name: contains } },
               ],
             },
             status: 'published',
@@ -217,7 +217,7 @@ export default ({ strapi }: { strapi: any }) => ({
             populate: {
               thumbnail: true,
               mediaSource: true,
-              studioGenre: true,
+              studioGenres: true,
             },
           })
           .then((rows: any[]) => {
@@ -230,8 +230,11 @@ export default ({ strapi }: { strapi: any }) => ({
                 slug: String(row.slug),
                 excerpt: row.description || null,
                 imageUrl: mediaThumb(row),
-                category: row.studioGenre?.name
-                  ? String(row.studioGenre.name)
+                category: Array.isArray(row.studioGenres) && row.studioGenres.length
+                  ? row.studioGenres
+                      .map((g: { name?: string }) => g?.name)
+                      .filter(Boolean)
+                      .join(' · ')
                   : row.genre
                     ? String(row.genre)
                     : null,
