@@ -157,7 +157,7 @@ export default ({ strapi }: { strapi: any }) => ({
                 type: 'show',
                 title: String(row.title),
                 slug: String(row.slug),
-                excerpt: row.description || null,
+                excerpt: row.shortDescription || null,
                 imageUrl: assetUrl(row, 'coverImage'),
               }),
             )

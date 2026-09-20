@@ -107,10 +107,12 @@ export async function syncMediaSourceFromYoutubeSource(strapi: any, source: Yout
     if (!nextMeta.channelTitle && prevMeta.channelTitle) {
       nextMeta.channelTitle = prevMeta.channelTitle
     }
+    const existingTitle = String(existing.title || '').trim()
     return strapi.db.query(MEDIA_UID).update({
       where: { id: existing.id },
       data: {
-        title: payload.title,
+        // Preserve editor-chosen titles; only fill when blank.
+        ...(existingTitle ? {} : { title: payload.title }),
         externalId: payload.externalId,
         externalUrl: payload.externalUrl,
         rawMeta: nextMeta,

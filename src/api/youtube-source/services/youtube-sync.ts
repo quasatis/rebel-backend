@@ -5,6 +5,7 @@ import {
   normalizeYoutubeUsername,
   normalizeYoutubeVideoId,
 } from '../../../utils/youtube-ids'
+import { setDocumentPublishedAt } from '../../../utils/publish-date'
 
 function formatSyncFailure(error: unknown): string {
   const raw = error instanceof Error ? error.message : 'sync failed'
@@ -296,30 +297,42 @@ export default ({ strapi }) => ({
         }
 
         if (existing) {
-          await strapi.db.query('api::show-episode.show-episode').update({
-            where: { id: existing.id },
-            data: {
-              ...episodeData,
-              // Repair rows imported before the publish-date fix. Only touch
-              // already-published rows so drafts stay drafts.
-              ...(existing.publishedAt && item.publishedAt
-                ? { publishedAt: item.publishedAt }
-                : {}),
-            },
-          })
+          // Existing CMS episodes are editor-owned. Only backfill duration when empty;
+          // never stomp title, description, isActive, or publishedAt on re-sync.
+          const patch: Record<string, unknown> = {}
+          if (
+            item.durationSeconds != null &&
+            (existing.durationSeconds == null || existing.durationSeconds === undefined)
+          ) {
+            patch.durationSeconds = item.durationSeconds
+          }
+          if (Object.keys(patch).length) {
+            await strapi.db.query('api::show-episode.show-episode').update({
+              where: { id: existing.id },
+              data: patch,
+            })
+          }
           episodesUpdated += 1
         } else {
           const slug = await uniqueEpisodeSlug(strapi, slugify(item.title))
-          await strapi.documents('api::show-episode.show-episode').create({
+          const created = await strapi.documents('api::show-episode.show-episode').create({
             data: {
               ...episodeData,
               slug,
               show: show.documentId,
               mediaSource: item.mediaSourceId,
-              publishedAt: item.publishedAt || new Date().toISOString(),
             },
             status: 'published',
           })
+          // create({ status: 'published' }) stamps publishedAt to "now"; overwrite with YouTube date.
+          if (item.publishedAt && created?.documentId) {
+            await setDocumentPublishedAt(
+              strapi,
+              'api::show-episode.show-episode',
+              created.documentId,
+              item.publishedAt,
+            )
+          }
           episodesCreated += 1
         }
       }
@@ -546,9 +559,16 @@ export default ({ strapi }) => ({
       const mediaPayload = normalized.mediaSource
 
       if (mediaSourceId) {
+        const linkedMedia = await strapi.db.query('api::media-source.media-source').findOne({
+          where: { id: mediaSourceId },
+        })
+        const keepTitle = String(linkedMedia?.title || '').trim()
         await strapi.db.query('api::media-source.media-source').update({
           where: { id: mediaSourceId },
-          data: mediaPayload,
+          data: {
+            ...mediaPayload,
+            ...(keepTitle ? { title: keepTitle } : {}),
+          },
         })
       } else {
         const existingMedia = await strapi.db.query('api::media-source.media-source').findOne({
@@ -559,9 +579,13 @@ export default ({ strapi }) => ({
         })
         if (existingMedia) {
           mediaSourceId = existingMedia.id
+          const keepTitle = String(existingMedia.title || '').trim()
           await strapi.db.query('api::media-source.media-source').update({
             where: { id: mediaSourceId },
-            data: mediaPayload,
+            data: {
+              ...mediaPayload,
+              ...(keepTitle ? { title: keepTitle } : {}),
+            },
           })
         } else {
           const createdMedia = await strapi.db.query('api::media-source.media-source').create({

@@ -302,39 +302,42 @@ async function ensureBackofficeUser(
     Boolean(firstName || lastName) &&
     (!String(existing.firstName || '').trim() || !String(existing.lastName || '').trim())
 
-  const patch: Record<string, unknown> = {
-    username: data.username,
-    email: data.email,
-    provider: 'local',
-    confirmed: true,
-    blocked: false,
-    role: data.roleId,
+  // Create-if-missing only. Never rewrite role / blocked / username / email on healthy
+  // accounts — that undoes intentional backoffice user management on every restart.
+  if (!shouldResetPassword && !needsNameBackfill && !providerMissing) {
+    return
+  }
+
+  const patch: Record<string, unknown> = {}
+  if (providerMissing) {
+    patch.provider = 'local'
   }
   if (shouldResetPassword) {
     patch.password = data.password
+    patch.provider = 'local'
+    patch.confirmed = true
   }
   if (needsNameBackfill) {
     if (firstName) patch.firstName = firstName
     if (lastName) patch.lastName = lastName
   }
 
-  await userService.edit(existing.id, patch)
-  await strapi.db.query('plugin::users-permissions.user').update({
-    where: { id: existing.id },
-    data: {
-      invitePending: false,
-      ...(needsNameBackfill
-        ? {
-            ...(firstName ? { firstName } : {}),
-            ...(lastName ? { lastName } : {}),
-          }
-        : {}),
-    },
-  })
+  if (Object.keys(patch).length) {
+    await userService.edit(existing.id, patch)
+  }
+  if (needsNameBackfill) {
+    await strapi.db.query('plugin::users-permissions.user').update({
+      where: { id: existing.id },
+      data: {
+        ...(firstName ? { firstName } : {}),
+        ...(lastName ? { lastName } : {}),
+      },
+    })
+  }
   strapi.log.info(
     shouldResetPassword
       ? `Repaired backoffice user credentials: ${data.email}`
-      : `Updated backoffice user (password kept): ${data.email}`,
+      : `Backfilled backoffice user profile: ${data.email}`,
   )
 }
 
@@ -445,6 +448,7 @@ async function seedBackofficeUsers(strapi: Core.Strapi) {
 }
 
 async function seedDemoContent(strapi: Core.Strapi) {
+  const newlyCreatedArticleIds = new Set<string>()
 
   async function ensureDocument(
     uid: any,
@@ -462,6 +466,9 @@ async function seedDemoContent(strapi: Core.Strapi) {
       data: data as never,
       ...(opts.publish ? { status: 'published' } : {}),
     })
+    if (uid === 'api::article.article' && created?.documentId) {
+      newlyCreatedArticleIds.add(created.documentId)
+    }
     strapi.log.info(`Seeded ${uid} ${slugOrKey}`)
     return created
   }
@@ -673,7 +680,7 @@ async function seedDemoContent(strapi: Core.Strapi) {
     { publish: true },
   )
 
-  // Pin publishedAt order so Latest grid matches mock hierarchy (featured Oxlade first).
+  // Pin publishedAt only for articles created in this run — never rewrite editor dates.
   const publishOrder = [
     { doc: articleOxlade, daysAgo: 1 },
     { doc: articleFashion, daysAgo: 2 },
@@ -683,6 +690,7 @@ async function seedDemoContent(strapi: Core.Strapi) {
     { doc: article, daysAgo: 6 },
   ]
   for (const item of publishOrder) {
+    if (!item.doc?.documentId || !newlyCreatedArticleIds.has(item.doc.documentId)) continue
     const publishedAt = new Date()
     publishedAt.setDate(publishedAt.getDate() - item.daysAgo)
     await strapi.documents('api::article.article').update({
@@ -954,11 +962,8 @@ async function seedDemoContent(strapi: Core.Strapi) {
         footerTagline: defaultFooterTagline,
       },
     })
-  } else if (!(homepageSettings[0] as { footerTagline?: string | null }).footerTagline) {
-    await strapi.documents('api::homepage-settings.homepage-settings').update({
-      documentId: homepageSettings[0].documentId,
-      data: { footerTagline: defaultFooterTagline } as never,
-    })
+  } else {
+    strapi.log.info('Skipping homepage-settings seed — settings already exist')
   }
 
   const about = await strapi.documents('api::about-page.about-page').findMany({ limit: 1 })
@@ -1010,8 +1015,18 @@ const DEFAULT_STUDIO_GENRES = [
   { name: 'Live', slug: 'live', sortOrder: 50, railTitle: 'Live from Africa' },
 ] as const
 
-/** Seed studio genres and link videos that still only have the legacy genre enum. */
+/** Seed studio genres once; later boots only migrate legacy links (never recreate deleted genres). */
 async function ensureStudioGenresAndMigrate(strapi: Core.Strapi) {
+  const seedStore = strapi.store({ type: 'core', name: 'rebel_seed' })
+  const storeMarked = (await seedStore.get({ key: 'studio_genres' })) === true
+  // Prior installs had no marker — any existing genre means defaults were already seeded.
+  const anyExisting = storeMarked
+    ? null
+    : await strapi.db.query('api::studio-genre.studio-genre').findOne({
+        where: {},
+        select: ['id'],
+      })
+  const genresAlreadySeeded = storeMarked || Boolean(anyExisting)
   const bySlug = new Map<string, { documentId: string; id: number }>()
 
   for (const row of DEFAULT_STUDIO_GENRES) {
@@ -1022,6 +1037,9 @@ async function ensureStudioGenresAndMigrate(strapi: Core.Strapi) {
       bySlug.set(row.slug, { documentId: existing.documentId, id: existing.id })
       continue
     }
+    // After the first successful seed, missing defaults mean intentional deletes — leave them gone.
+    if (genresAlreadySeeded) continue
+
     const created = await strapi.db.query('api::studio-genre.studio-genre').create({
       data: {
         name: row.name,
@@ -1032,6 +1050,10 @@ async function ensureStudioGenresAndMigrate(strapi: Core.Strapi) {
     })
     bySlug.set(row.slug, { documentId: created.documentId, id: created.id })
     strapi.log.info(`Seeded studio genre ${row.slug}`)
+  }
+
+  if (!storeMarked) {
+    await seedStore.set({ key: 'studio_genres', value: true })
   }
 
   // Link from legacy `genre` enum → `studioGenres` (many-to-many). Do not
@@ -1066,6 +1088,11 @@ async function ensureStudioGenresAndMigrate(strapi: Core.Strapi) {
 
 /** One-shot cleanup for retired seed content editors already tried to delete. */
 async function removeRetiredDemoVideos(strapi: Core.Strapi) {
+  const seedStore = strapi.store({ type: 'core', name: 'rebel_seed' })
+  if ((await seedStore.get({ key: 'retired_demo_cleaned' })) === true) {
+    return
+  }
+
   const retiredStudioSlugs = ['studio-cut-night-drive']
   const retiredCollectionSlugs = ['night-drives']
   const retiredMediaKeys = ['youtube:dQw4w9WgXcQ']
@@ -1196,6 +1223,8 @@ async function removeRetiredDemoVideos(strapi: Core.Strapi) {
       strapi.log.info(`Removed retired demo media source: ${providerExternalKey}`)
     }
   }
+
+  await seedStore.set({ key: 'retired_demo_cleaned', value: true })
 }
 
 let netlifyTimer: ReturnType<typeof setTimeout> | null = null
@@ -1251,6 +1280,24 @@ export default {
 
     await setPublicPermissions(strapi)
     await setAuthenticatedPermissions(strapi)
+
+    // Copy long description → shortDescription while the DB column may still exist
+    // after schema removal (orphan column). Must run before editors lose that copy.
+    try {
+      const { migrateShowShortDescriptions } = await import(
+        './utils/migrate-show-short-description'
+      )
+      const result = await migrateShowShortDescriptions(strapi)
+      if (result.migrated > 0) {
+        strapi.log.info(`Migrated ${result.migrated} show description(s) into shortDescription.`)
+      }
+    } catch (error) {
+      strapi.log.warn(
+        `Show shortDescription migration skipped: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      )
+    }
 
     try {
       await ensureStudioGenresAndMigrate(strapi)
@@ -1316,11 +1363,21 @@ export default {
         } else if (!force) {
           // Prior installs seeded without a marker — detect and mark so we do
           // not recreate rows the editor already deleted.
-          const prior = await strapi.documents('api::artist.artist').findMany({
-            filters: { slug: 'oxlade' },
-            limit: 1,
-          })
-          if (prior.length) {
+          const priorChecks = await Promise.all([
+            strapi.documents('api::artist.artist').findMany({
+              filters: { slug: 'oxlade' },
+              limit: 1,
+            }),
+            strapi.documents('api::playlist.playlist').findMany({
+              filters: { slug: 'rebel-essentials' },
+              limit: 1,
+            }),
+            strapi.documents('api::article.article').findMany({
+              filters: { slug: 'the-sound-of-a-new-generation' },
+              limit: 1,
+            }),
+          ])
+          if (priorChecks.some((rows) => rows.length > 0)) {
             await seedStore.set({ key: 'demo_content', value: true })
             strapi.log.info(
               'Demo content seed marker set (prior seed detected); skipping recreate.',
@@ -1330,10 +1387,10 @@ export default {
             await seedStore.set({ key: 'demo_content', value: true })
           }
         } else {
-      await seedDemoContent(strapi)
-      await seedStore.set({ key: 'demo_content', value: true })
-      strapi.log.info('Demo content seed completed (forced).')
-    }
+          await seedDemoContent(strapi)
+          await seedStore.set({ key: 'demo_content', value: true })
+          strapi.log.info('Demo content seed completed (forced).')
+        }
       } catch (error) {
         strapi.log.error(
           `Demo seed failed: ${error instanceof Error ? error.message : 'unknown'}`,

@@ -64,11 +64,11 @@ Bootstrap always creates Users & Permissions roles/users for the custom backoffi
 | Editor | `editor@rebelafrique.com` | `RebelEditor123!` |
 | Viewer (read-only) | `viewer@rebelafrique.com` | `RebelViewer123!` |
 
-Seeded accounts are create-if-missing: passwords are kept across restarts unless the account is missing `provider`/`password` (e.g. after a DB repair), or you set `FORCE_SEED_USER_PASSWORDS=true`. Admins manage additional users from the custom backoffice **Users** page (invite magic links via Brevo when `BREVO_API_KEY` is set).
+Seeded accounts are create-if-missing: existing users are never role/blocked/email-rewritten on restart. Passwords are kept unless the account is missing `provider`/`password` (e.g. after a DB repair), or you set `FORCE_SEED_USER_PASSWORDS=true`. Admins manage additional users from the custom backoffice **Users** page (invite magic links via Brevo when `BREVO_API_KEY` is set).
 
 Strapi **Admin** (system) remains at http://localhost:1337/admin and is separate from these accounts.
 
-When `SEED_DEMO_CONTENT=true`, bootstrap also creates demo editorial content (article, artist, release, studio video, event, homepage feature).
+When `SEED_DEMO_CONTENT=true`, bootstrap creates demo editorial content **once** (store marker `rebel_seed.demo_content`). Existing documents are never updated; deleted seed rows are not recreated. Set `FORCE_SEED_DEMO_CONTENT=true` only when you intentionally want a full re-seed.
 
 Backoffice: http://localhost:3001/login
 
