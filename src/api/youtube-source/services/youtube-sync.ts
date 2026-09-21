@@ -6,6 +6,7 @@ import {
   normalizeYoutubeVideoId,
 } from '../../../utils/youtube-ids'
 import { setDocumentPublishedAt } from '../../../utils/publish-date'
+import { isExcludedYoutubeVideoTitle } from './youtube'
 
 function formatSyncFailure(error: unknown): string {
   const raw = error instanceof Error ? error.message : 'sync failed'
@@ -550,6 +551,7 @@ export default ({ strapi }) => ({
     }
 
     for (const raw of items) {
+      if (isExcludedYoutubeVideoTitle(raw.title)) continue
       const normalized = normalizer.normalize(raw, attribution)
       const existing = await strapi.db.query('api::synced-video.synced-video').findOne({
         where: { youtubeVideoId: normalized.youtubeVideoId },

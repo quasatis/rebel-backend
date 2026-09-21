@@ -22,6 +22,14 @@ export type YoutubeListItem = {
   playlistPosition?: number
 }
 
+/**
+ * YouTube playlistItems uses this placeholder title when a video is private
+ * (or otherwise inaccessible to the API key). Never sync those into episodes.
+ */
+export function isExcludedYoutubeVideoTitle(title: unknown): boolean {
+  return String(title || '').trim().toLowerCase() === 'private video'
+}
+
 function getApiKey(): string {
   const key = process.env.YOUTUBE_API_KEY
   if (!key) {
@@ -156,9 +164,11 @@ export default () => ({
       for (const item of page.items || []) {
         const videoId = item.contentDetails?.videoId || item.snippet?.resourceId?.videoId
         if (!videoId) continue
+        const title = item.snippet?.title || 'Untitled'
+        if (isExcludedYoutubeVideoTitle(title)) continue
         items.push({
           id: videoId,
-          title: item.snippet?.title || 'Untitled',
+          title,
           description: item.snippet?.description || '',
           thumbnailUrl:
             item.snippet?.thumbnails?.high?.url ||
@@ -363,9 +373,11 @@ export default () => ({
     })
     const item = data.items?.[0]
     if (!item?.id) return null
+    const title = item.snippet?.title || 'Untitled'
+    if (isExcludedYoutubeVideoTitle(title)) return null
     return {
       id: item.id,
-      title: item.snippet?.title || 'Untitled',
+      title,
       description: item.snippet?.description || '',
       thumbnailUrl:
         item.snippet?.thumbnails?.high?.url ||
