@@ -14,10 +14,7 @@ export default ({ env }) => {
         contentSecurityPolicy: {
           useDefaults: true,
           directives: {
-            // #region agent log
-            // Temporarily allow debug ingest during ListPage dynamic-import investigation.
-            'connect-src': ["'self'", 'https:', 'http://127.0.0.1:7942'],
-            // #endregion
+            'connect-src': ["'self'", 'https:'],
             'img-src': ["'self'", 'data:', 'blob:', 'market-assets.strapi.io', 'res.cloudinary.com'],
             'media-src': [
               "'self'",
