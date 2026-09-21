@@ -303,22 +303,19 @@ export default ({ strapi }) => ({
         }
 
         if (existing) {
-          // Existing CMS episodes are editor-owned for title/description/isActive.
-          // Always repair duration when empty, and repair publishedAt when it still
-          // looks like a sync stamp (or is missing) so episode numbers can sort correctly.
-          const patch: Record<string, unknown> = {}
-          if (
-            item.durationSeconds != null &&
-            (existing.durationSeconds == null || existing.durationSeconds === undefined)
-          ) {
+          // YouTube is source of truth for synced episode title/description/duration.
+          // Keep isActive as editor-owned (disable in CMS without unlinking the video).
+          const patch: Record<string, unknown> = {
+            title: item.title,
+            description: item.description,
+          }
+          if (item.durationSeconds != null) {
             patch.durationSeconds = item.durationSeconds
           }
-          if (Object.keys(patch).length) {
-            await strapi.db.query('api::show-episode.show-episode').update({
-              where: { id: existing.id },
-              data: patch,
-            })
-          }
+          await strapi.db.query('api::show-episode.show-episode').update({
+            where: { id: existing.id },
+            data: patch,
+          })
           if (item.publishedAt && existing.documentId) {
             const cmsMs = existing.publishedAt ? new Date(existing.publishedAt).getTime() : NaN
             const createdMs = existing.createdAt ? new Date(existing.createdAt).getTime() : NaN
@@ -587,16 +584,9 @@ export default ({ strapi }) => ({
       const mediaPayload = normalized.mediaSource
 
       if (mediaSourceId) {
-        const linkedMedia = await strapi.db.query('api::media-source.media-source').findOne({
-          where: { id: mediaSourceId },
-        })
-        const keepTitle = String(linkedMedia?.title || '').trim()
         await strapi.db.query('api::media-source.media-source').update({
           where: { id: mediaSourceId },
-          data: {
-            ...mediaPayload,
-            ...(keepTitle ? { title: keepTitle } : {}),
-          },
+          data: mediaPayload,
         })
       } else {
         const existingMedia = await strapi.db.query('api::media-source.media-source').findOne({
@@ -607,13 +597,9 @@ export default ({ strapi }) => ({
         })
         if (existingMedia) {
           mediaSourceId = existingMedia.id
-          const keepTitle = String(existingMedia.title || '').trim()
           await strapi.db.query('api::media-source.media-source').update({
             where: { id: mediaSourceId },
-            data: {
-              ...mediaPayload,
-              ...(keepTitle ? { title: keepTitle } : {}),
-            },
+            data: mediaPayload,
           })
         } else {
           const createdMedia = await strapi.db.query('api::media-source.media-source').create({

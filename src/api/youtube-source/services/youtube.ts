@@ -84,7 +84,7 @@ function parseDuration(iso?: string): number | undefined {
   return h * 3600 + m * 60 + s
 }
 
-/** Batch video IDs (max 50 per YouTube videos.list call) and attach duration + true publish date. */
+/** Batch video IDs (max 50 per YouTube videos.list call) and attach duration, title, and true publish date. */
 async function enrichVideoDetails(items: YoutubeListItem[]): Promise<YoutubeListItem[]> {
   if (!items.length) return items
   const byId = new Map(items.map((item) => [item.id, { ...item }]))
@@ -95,7 +95,12 @@ async function enrichVideoDetails(items: YoutubeListItem[]): Promise<YoutubeList
     const data = await youtubeGet<{
       items?: Array<{
         id?: string
-        snippet?: { publishedAt?: string }
+        snippet?: {
+          title?: string
+          description?: string
+          publishedAt?: string
+          channelTitle?: string
+        }
         contentDetails?: { duration?: string }
       }>
     }>('videos', {
@@ -107,10 +112,18 @@ async function enrichVideoDetails(items: YoutubeListItem[]): Promise<YoutubeList
       const existing = byId.get(row.id)
       if (!existing) continue
       existing.durationSeconds = parseDuration(row.contentDetails?.duration)
-      // Prefer the video's own publish date over playlistItems.snippet.publishedAt
-      // (that field is when the item was added to the playlist).
+      // Prefer the video resource over playlistItems (titles change; playlist add-date ≠ publish date).
       if (row.snippet?.publishedAt) {
         existing.publishedAt = row.snippet.publishedAt
+      }
+      if (row.snippet?.title) {
+        existing.title = row.snippet.title
+      }
+      if (typeof row.snippet?.description === 'string') {
+        existing.description = row.snippet.description
+      }
+      if (row.snippet?.channelTitle) {
+        existing.channelTitle = row.snippet.channelTitle
       }
     }
     // Small pause between batches to reduce quota spikes
