@@ -29,7 +29,7 @@ Generate unique values for `APP_KEYS`, `API_TOKEN_SALT`, `ADMIN_JWT_SECRET`, `TR
 | `CLOUDINARY_KEY` | Cloudinary API key |
 | `CLOUDINARY_SECRET` | Cloudinary API secret |
 | `YOUTUBE_API_KEY` | YouTube Data API v3 key |
-| `CONTACT_TO` / `CONTACT_FROM` | Contact form recipient / sender (default `team@quasatis.com`) |
+| `CONTACT_TO` / `CONTACT_FROM` | Contact form recipient / sender (default `rebelafriqueapp@gmail.com`) |
 | `BREVO_API_KEY` | Brevo Transactional API key (preferred email provider) |
 | `BREVO_SENDER_EMAIL` / `BREVO_SENDER_NAME` | Brevo default from address / display name |
 | `BACKOFFICE_URL` | Backoffice origin for invite magic links (e.g. `http://localhost:3001`) |

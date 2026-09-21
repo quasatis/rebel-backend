@@ -31,12 +31,12 @@ export default ({ env }) => ({
             settings: {
               defaultFrom: env(
                 'BREVO_SENDER_EMAIL',
-                env('CONTACT_FROM', 'team@quasatis.com'),
+                env('CONTACT_FROM', 'rebelafriqueapp@gmail.com'),
               ),
               defaultFromName: env('BREVO_SENDER_NAME', 'REBEL AFRIQUE'),
               defaultReplyTo: env(
                 'BREVO_SENDER_EMAIL',
-                env('CONTACT_FROM', 'team@quasatis.com'),
+                env('CONTACT_FROM', 'rebelafriqueapp@gmail.com'),
               ),
             },
           },
@@ -59,8 +59,8 @@ export default ({ env }) => ({
                   : undefined,
               },
               settings: {
-                defaultFrom: env('CONTACT_FROM', 'team@quasatis.com'),
-                defaultReplyTo: env('CONTACT_FROM', 'team@quasatis.com'),
+                defaultFrom: env('CONTACT_FROM', 'rebelafriqueapp@gmail.com'),
+                defaultReplyTo: env('CONTACT_FROM', 'rebelafriqueapp@gmail.com'),
               },
             },
           },

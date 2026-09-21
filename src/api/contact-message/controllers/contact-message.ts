@@ -39,13 +39,13 @@ export default factories.createCoreController(
       if (!name) return ctx.badRequest('Name is required.')
       if (name.length > MAX_NAME) return ctx.badRequest('Name is too long.')
       if (!email) return ctx.badRequest('Email is required.')
-      if (!EMAIL_RE.test(email)) return ctx.badRequest('Enter a valid email address.')
+      if (!EMAIL_RE.test(email)) return ctx.badRequest('Enter a valid email.')
       if (!message) return ctx.badRequest('Message is required.')
       if (message.length > MAX_MESSAGE) return ctx.badRequest('Message is too long.')
 
-      const to = String(process.env.CONTACT_TO || 'team@quasatis.com').trim()
+      const to = String(process.env.CONTACT_TO || 'rebelafriqueapp@gmail.com').trim()
       const from = String(
-        process.env.BREVO_SENDER_EMAIL || process.env.CONTACT_FROM || 'team@quasatis.com',
+        process.env.BREVO_SENDER_EMAIL || process.env.CONTACT_FROM || 'rebelafriqueapp@gmail.com',
       ).trim()
       const emailConfigured = Boolean(
         String(process.env.BREVO_API_KEY || '').trim() ||
@@ -113,7 +113,7 @@ export default factories.createCoreController(
       } catch (error) {
         strapi.log.error('Contact email send failed', error)
         return ctx.internalServerError(
-          'We could not send your message right now. Please try again or email team@quasatis.com.',
+          'We could not send your message right now. Please try again or email rebelafriqueapp@gmail.com.',
         )
       }
 

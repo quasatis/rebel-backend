@@ -29,6 +29,9 @@
       "target": "api::category.category"
     },
     "featured": { "type": "boolean", "default": false },
+    "featuredOrder": { "type": "integer", "default": 0 },
+    "featuredStart": { "type": "datetime" },
+    "featuredEnd": { "type": "datetime" },
     "genre": {
       "type": "enumeration",
       "enum": ["music", "film", "documentary", "interview", "live"]

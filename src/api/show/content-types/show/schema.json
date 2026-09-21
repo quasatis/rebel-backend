@@ -28,6 +28,8 @@
     },
     "featured": { "type": "boolean", "default": false },
     "featuredOrder": { "type": "integer", "default": 0 },
+    "featuredStart": { "type": "datetime" },
+    "featuredEnd": { "type": "datetime" },
     "sortOrder": { "type": "integer", "default": 0 },
     "isActive": { "type": "boolean", "default": true },
     "seoTitle": { "type": "string", "maxLength": 70 },
