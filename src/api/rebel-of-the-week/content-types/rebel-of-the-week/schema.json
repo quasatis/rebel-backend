@@ -1,0 +1,78 @@
+{
+  "kind": "singleType",
+  "collectionName": "rebel_of_the_weeks",
+  "info": {
+    "singularName": "rebel-of-the-week",
+    "pluralName": "rebel-of-the-weeks",
+    "displayName": "Rebel of the Week"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "weekLabel": { "type": "string", "maxLength": 20, "default": "001" },
+    "seoTitle": { "type": "string", "maxLength": 70 },
+    "seoDescription": { "type": "text", "maxLength": 160 },
+    "artist": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::artist.artist"
+    },
+    "heroEyebrow": { "type": "string", "maxLength": 80 },
+    "heroName": { "type": "string", "maxLength": 80 },
+    "heroBlurb": { "type": "text", "maxLength": 400 },
+    "heroCtaLabel": { "type": "string", "maxLength": 60 },
+    "heroImage": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"]
+    },
+    "introLabel": { "type": "string", "maxLength": 80 },
+    "introHeadline": { "type": "text", "maxLength": 200 },
+    "introQuote": { "type": "text", "maxLength": 300 },
+    "introBioLeft": { "type": "text", "maxLength": 800 },
+    "introBioRight": { "type": "text", "maxLength": 800 },
+    "breakthroughLabel": { "type": "string", "maxLength": 80 },
+    "breakthroughTitleWhite": { "type": "string", "maxLength": 80 },
+    "breakthroughTitleRed": { "type": "string", "maxLength": 80 },
+    "breakthroughBody": { "type": "text", "maxLength": 800 },
+    "breakthroughCaption": { "type": "string", "maxLength": 120 },
+    "breakthroughImage": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"]
+    },
+    "breakthroughStats": { "type": "json" },
+    "ascentLabel": { "type": "string", "maxLength": 80 },
+    "ascentTitle": { "type": "string", "maxLength": 100 },
+    "ascentRange": { "type": "string", "maxLength": 40 },
+    "milestones": { "type": "json" },
+    "quoteText": { "type": "text", "maxLength": 400 },
+    "quoteAccent": { "type": "string", "maxLength": 80 },
+    "quoteImage": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"]
+    },
+    "listeningLabel": { "type": "string", "maxLength": 80 },
+    "listeningTitle": { "type": "string", "maxLength": 80 },
+    "tracks": { "type": "json" },
+    "albumEyebrow": { "type": "string", "maxLength": 60 },
+    "albumName": { "type": "string", "maxLength": 80 },
+    "albumDescription": { "type": "text", "maxLength": 400 },
+    "albumCtaLabel": { "type": "string", "maxLength": 60 },
+    "albumUrl": { "type": "string", "maxLength": 500 },
+    "albumMonogram": { "type": "string", "maxLength": 4 },
+    "awardsLabel": { "type": "string", "maxLength": 80 },
+    "awardsTitle": { "type": "string", "maxLength": 100 },
+    "awards": { "type": "json" },
+    "nextLabel": { "type": "string", "maxLength": 80 },
+    "nextHeadline": { "type": "string", "maxLength": 120 },
+    "nextBody": { "type": "text", "maxLength": 400 },
+    "nextCtaLabel": { "type": "string", "maxLength": 60 },
+    "nextCtaUrl": { "type": "string", "maxLength": 500 },
+    "nextItems": { "type": "json" },
+    "dropEyebrow": { "type": "string", "maxLength": 80 },
+    "dropHeadline": { "type": "string", "maxLength": 100 },
+    "dropPlaceholder": { "type": "string", "maxLength": 60 },
+    "dropCtaLabel": { "type": "string", "maxLength": 40 }
+  }
+}

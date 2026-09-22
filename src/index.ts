@@ -26,6 +26,7 @@ const CONTENT_UIDS = [
   'api::homepage-settings.homepage-settings',
   'api::launch-settings.launch-settings',
   'api::about-page.about-page',
+  'api::rebel-of-the-week.rebel-of-the-week',
   'api::newsletter-config.newsletter-config',
   'api::newsletter-subscription.newsletter-subscription',
   'api::newsletter-campaign.newsletter-campaign',
@@ -990,6 +991,8 @@ async function seedDemoContent(strapi: Core.Strapi) {
     })
   }
 
+  await ensureRebelOfTheWeek(strapi)
+
   const launchSettings = await strapi
     .documents('api::launch-settings.launch-settings')
     .findMany({ limit: 1 })
@@ -1005,6 +1008,116 @@ async function seedDemoContent(strapi: Core.Strapi) {
   }
 
   strapi.log.info('Demo content seed complete')
+}
+
+/** Always ensure the REBEL singleton exists (empty singleTypes 404 publicly). */
+async function ensureRebelOfTheWeek(strapi: Core.Strapi) {
+  const rebelWeek = await strapi
+    .documents('api::rebel-of-the-week.rebel-of-the-week')
+    .findMany({ limit: 1 })
+  if (rebelWeek.length) return
+
+  await strapi.documents('api::rebel-of-the-week.rebel-of-the-week').create({
+    data: {
+      weekLabel: '001',
+      seoTitle: 'REBEL — Rebel of the Week',
+      seoDescription:
+        'Meet this week’s Rebel — artists reshaping African and Black creative culture.',
+      heroEyebrow: 'REBEL OF THE WEEK',
+      heroName: 'TYLA',
+      heroBlurb:
+        'Johannesburg to the world. The artist turning South African rhythm, movement and self-belief into a new global language.',
+      heroCtaLabel: "MEET THIS WEEK'S REBEL",
+      introLabel: 'WHO IS TYLA?',
+      introHeadline: 'THE GIRL FROM JOBURG WHO MADE THE WORLD MOVE.',
+      introQuote: 'I always wanted to be the first me, not the next anyone.',
+      introBioLeft:
+        'Born and raised in Johannesburg, Tyla Laura Seethal grew up inside a rich collision of sound: amapiano basslines, R&B melodies, pop spectacle and the kinetic pulse of South African dance.',
+      introBioRight:
+        "Her answer is 'popiano' — a fluid world that belongs everywhere without surrendering where it comes from. The music is polished, but the attitude remains instinctive: playful, proud and impossible to copy.",
+      breakthroughLabel: 'THE BREAKTHROUGH',
+      breakthroughTitleWhite: 'ONE DROP.',
+      breakthroughTitleRed: 'A TIDAL WAVE.',
+      breakthroughBody:
+        "When 'Water' arrived, it did more than soundtrack a dance challenge. It brought the sensual snap of Bacardi dance into living rooms across continents — on its own terms. The record reached the Billboard Hot 100 top ten and helped open a new Grammy chapter for African music.",
+      breakthroughCaption: 'PORTRAIT STUDY / JOHANNESBURG ENERGY',
+      breakthroughStats: [
+        { value: '#7', label: 'US HOT 100 PEAK' },
+        { value: '1B+', label: 'GLOBAL STREAMS' },
+      ],
+      ascentLabel: 'THE ASCENT',
+      ascentTitle: 'A REBEL IN MOTION',
+      ascentRange: '2019 — TODAY',
+      milestones: [
+        {
+          year: '2019',
+          title: 'THE FIRST SPARK',
+          body: 'Tyla introduces her sound with Getting Late — a meeting point between R&B ease and South African rhythm.',
+        },
+        {
+          year: '2023',
+          title: 'WATER MOVES THE WORLD',
+          body: 'A hypnotic hook and a viral Bacardi-inspired dance turn a homegrown record into a global pop phenomenon.',
+        },
+        {
+          year: '2024',
+          title: 'HISTORY, MADE',
+          body: 'Water earns the inaugural Grammy for Best African Music Performance. Her self-titled debut album follows.',
+        },
+        {
+          year: 'NOW',
+          title: 'A WORLD OF HER OWN',
+          body: 'With a new visual language and a borderless fanbase, Tyla continues to expand what African pop can look and feel like.',
+        },
+      ],
+      quoteText: 'BEING AFRICAN IS THE COOL THING. THE WORLD IS FINALLY CATCHING UP.',
+      quoteAccent: 'THE COOL THING',
+      listeningLabel: 'ESSENTIAL LISTENING',
+      listeningTitle: 'PRESS PLAY',
+      tracks: [
+        { title: 'WATER', duration: '3:20', url: '' },
+        { title: 'TRUTH OR DARE', duration: '3:10', url: '' },
+        { title: 'JUMP', duration: '2:55', url: '' },
+        { title: 'ART', duration: '3:05', url: '' },
+      ],
+      albumEyebrow: 'DEBUT ALBUM',
+      albumName: 'TYLA',
+      albumDescription:
+        'A vivid, self-assured debut; intimate R&B, amapiano swing and global pop scale in one unmistakable voice.',
+      albumCtaLabel: 'LISTEN TO THE ALBUM',
+      albumUrl: '',
+      albumMonogram: 'T',
+      awardsLabel: 'BY THE NUMBERS',
+      awardsTitle: 'THE TROPHY SHELF',
+      awards: [
+        { title: 'GRAMMY AWARD', description: 'BEST AFRICAN MUSIC PERFORMANCE' },
+        { title: 'BILLBOARD HOT 100', description: "TOP 10 WITH 'WATER'" },
+        { title: 'MTV VMA', description: 'BEST AFROBEATS' },
+        { title: 'BET AWARDS', description: 'BEST NEW ARTIST / INTERNATIONAL ACT' },
+      ],
+      nextLabel: "WHAT'S NEXT",
+      nextHeadline: 'THE NEXT WAVE IS LOADING.',
+      nextBody:
+        "New music, bigger stages and a visual world that keeps evolving. Official dates and project announcements land first through Tyla's channels.",
+      nextCtaLabel: 'FOLLOW OFFICIAL UPDATES',
+      nextCtaUrl: '',
+      nextItems: [
+        { title: 'JOHANNESBURG · HOMECOMING', subtitle: 'DATES VIA OFFICIAL CHANNELS', url: '' },
+        { title: 'LONDON · FESTIVAL SEASON', subtitle: 'DATES VIA OFFICIAL CHANNELS', url: '' },
+        { title: 'NEW YORK · LIVE STAGE', subtitle: 'DATES VIA OFFICIAL CHANNELS', url: '' },
+        {
+          title: 'GLOBAL · MORE TO BE ANNOUNCED',
+          subtitle: 'DATES VIA OFFICIAL CHANNELS',
+          url: '',
+        },
+      ],
+      dropEyebrow: "NEXT WEEK'S REBEL",
+      dropHeadline: 'NEVER MISS THE DROP.',
+      dropPlaceholder: 'YOUR EMAIL ADDRESS',
+      dropCtaLabel: 'JOIN',
+    },
+  })
+  strapi.log.info('Ensured rebel-of-the-week singleton exists')
 }
 
 const DEFAULT_STUDIO_GENRES = [
@@ -1399,6 +1512,14 @@ export default {
     }
 
     try {
+      await ensureRebelOfTheWeek(strapi)
+    } catch (error) {
+      strapi.log.warn(
+        `ensureRebelOfTheWeek failed: ${error instanceof Error ? error.message : 'unknown'}`,
+      )
+    }
+
+    try {
       const {
         syncAllYoutubeSourcesToMediaSources,
         linkPlaylistsToYoutubeMediaSources,
@@ -1457,6 +1578,7 @@ export default {
         'api::homepage-settings.homepage-settings',
         'api::launch-settings.launch-settings',
         'api::about-page.about-page',
+        'api::rebel-of-the-week.rebel-of-the-week',
         'api::newsletter-config.newsletter-config',
       ],
       async afterCreate() {
