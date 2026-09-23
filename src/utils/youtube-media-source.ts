@@ -305,3 +305,105 @@ export async function linkPlaylistsToYoutubeMediaSources(
   }
   return linked
 }
+
+const PUBLIC_YOUTUBE_KEYS = [
+  'id',
+  'documentId',
+  'displayTitle',
+  'sourceType',
+  'playlistId',
+  'videoId',
+  'channelId',
+  'channelUrl',
+  'username',
+  'description',
+  'active',
+] as const
+
+/** Public-safe youtube-source fields (no sync internals). */
+export function publicYoutubeSource(source: Record<string, unknown> | null | undefined) {
+  if (!source) return null
+  const out: Record<string, unknown> = {}
+  for (const key of PUBLIC_YOUTUBE_KEYS) {
+    if (key in source) out[key] = source[key]
+  }
+  return out.documentId || out.id ? out : null
+}
+
+function embedScore(row: {
+  youtubeSource?: unknown
+  mediaSource?: unknown
+  spotifySource?: unknown
+  vimeoSource?: unknown
+}) {
+  return (
+    (row.youtubeSource ? 8 : 0) +
+    (row.mediaSource ? 4 : 0) +
+    (row.spotifySource ? 2 : 0) +
+    (row.vimeoSource ? 1 : 0)
+  )
+}
+
+/**
+ * Published playlist rows often lack youtubeSource/mediaSource while draft
+ * still has them. Pick the richest version per documentId.
+ */
+export async function playlistEmbedsByDocumentId(strapi: any, documentIds: string[]) {
+  const ids = [...new Set(documentIds.filter(Boolean))]
+  const best = new Map<string, any>()
+  if (!ids.length) return best
+
+  const rows = await strapi.db.query(PLAYLIST_UID).findMany({
+    where: { documentId: { $in: ids } },
+    populate: ['youtubeSource', 'mediaSource', 'spotifySource', 'vimeoSource'],
+  })
+
+  for (const row of rows || []) {
+    const key = row.documentId
+    if (!key) continue
+    const current = best.get(key)
+    if (!current || embedScore(row) > embedScore(current)) {
+      best.set(key, row)
+    }
+  }
+  return best
+}
+
+function playlistPayloadItems(payload: unknown): Record<string, unknown>[] {
+  if (!payload || typeof payload !== 'object') return []
+  const data = (payload as { data?: unknown }).data
+  if (Array.isArray(data)) {
+    return data.filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object')
+  }
+  if (data && typeof data === 'object') return [data as Record<string, unknown>]
+  return []
+}
+
+/** Attach youtube/media embeds from any draft/published version after U&P sanitize. */
+export async function attachPublicPlaylistEmbeds(strapi: any, payload: unknown) {
+  const items = playlistPayloadItems(payload)
+  const documentIds = items
+    .map((item) => (typeof item.documentId === 'string' ? item.documentId : ''))
+    .filter(Boolean)
+  const embeds = await playlistEmbedsByDocumentId(strapi, documentIds)
+
+  for (const item of items) {
+    const documentId = typeof item.documentId === 'string' ? item.documentId : ''
+    const row = embeds.get(documentId)
+    if (!row) continue
+
+    if (!item.youtubeSource && row.youtubeSource) {
+      item.youtubeSource = publicYoutubeSource(row.youtubeSource)
+    }
+    if (!item.mediaSource && row.mediaSource) {
+      item.mediaSource = row.mediaSource
+    }
+    if (!item.spotifySource && row.spotifySource) {
+      item.spotifySource = row.spotifySource
+    }
+    if (!item.vimeoSource && row.vimeoSource) {
+      item.vimeoSource = row.vimeoSource
+    }
+  }
+  return payload
+}
