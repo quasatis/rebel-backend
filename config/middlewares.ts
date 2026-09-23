@@ -31,8 +31,11 @@ export default ({ env }) => {
     {
       name: 'strapi::cors',
       config: {
-        headers: '*',
+        // `*` does not cover Authorization (CORS spec). List it explicitly.
+        headers: ['Content-Type', 'Authorization', 'Origin', 'Accept', 'X-Requested-With'],
+        methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'],
         origin: origins.length > 0 ? origins : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003'],
+        keepHeaderOnError: true,
       },
     },
     'strapi::poweredBy',
