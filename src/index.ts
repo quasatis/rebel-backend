@@ -277,6 +277,7 @@ async function ensureBackofficeUser(
     where: {
       $or: [{ email: data.email }, { username: data.username }],
     },
+    populate: ['role'],
   })
 
   const firstName = String(data.firstName || '').trim() || null
@@ -310,10 +311,18 @@ async function ensureBackofficeUser(
   const needsNameBackfill =
     Boolean(firstName || lastName) &&
     (!String(existing.firstName || '').trim() || !String(existing.lastName || '').trim())
+  const roleMissing = !existing.role
+  const unconfirmed = existing.confirmed === false
 
   // Create-if-missing only. Never rewrite role / blocked / username / email on healthy
   // accounts — that undoes intentional backoffice user management on every restart.
-  if (!shouldResetPassword && !needsNameBackfill && !providerMissing) {
+  if (
+    !shouldResetPassword &&
+    !needsNameBackfill &&
+    !providerMissing &&
+    !roleMissing &&
+    !unconfirmed
+  ) {
     return
   }
 
@@ -324,6 +333,12 @@ async function ensureBackofficeUser(
   if (shouldResetPassword) {
     patch.password = data.password
     patch.provider = 'local'
+    patch.confirmed = true
+  }
+  if (roleMissing) {
+    patch.role = data.roleId
+  }
+  if (unconfirmed) {
     patch.confirmed = true
   }
   if (needsNameBackfill) {
@@ -346,8 +361,38 @@ async function ensureBackofficeUser(
   strapi.log.info(
     shouldResetPassword
       ? `Repaired backoffice user credentials: ${data.email}`
-      : `Backfilled backoffice user profile: ${data.email}`,
+      : roleMissing || unconfirmed
+        ? `Repaired backoffice user auth fields: ${data.email}`
+        : `Backfilled backoffice user profile: ${data.email}`,
   )
+}
+
+async function repairUsersMissingRole(strapi: Core.Strapi) {
+  const [adminRole, editorRole, authRole] = await Promise.all([
+    strapi.db.query('plugin::users-permissions.role').findOne({ where: { type: 'admin' } }),
+    strapi.db.query('plugin::users-permissions.role').findOne({ where: { type: 'editor' } }),
+    strapi.db.query('plugin::users-permissions.role').findOne({
+      where: { type: 'authenticated' },
+    }),
+  ])
+  const fallback = adminRole || editorRole || authRole
+  if (!fallback) return
+
+  const users = await strapi.db.query('plugin::users-permissions.user').findMany({
+    populate: ['role'],
+  })
+  for (const user of users) {
+    if (user.role) continue
+    const roleId =
+      /admin/i.test(String(user.username || '')) || /admin/i.test(String(user.email || ''))
+        ? adminRole?.id || fallback.id
+        : editorRole?.id || fallback.id
+    await strapi.db.query('plugin::users-permissions.user').update({
+      where: { id: user.id },
+      data: { role: roleId, confirmed: true },
+    })
+    strapi.log.warn(`Assigned a role to user without one: ${user.email || user.id}`)
+  }
 }
 
 async function seedBackofficeUsers(strapi: Core.Strapi) {
@@ -1702,6 +1747,7 @@ export default {
 
     try {
       await seedBackofficeUsers(strapi)
+      await repairUsersMissingRole(strapi)
     } catch (error) {
       strapi.log.error(
         `Backoffice user seed failed: ${error instanceof Error ? error.message : 'unknown'}`,
