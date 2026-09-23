@@ -26,6 +26,7 @@ const CONTENT_UIDS = [
   'api::homepage-settings.homepage-settings',
   'api::launch-settings.launch-settings',
   'api::about-page.about-page',
+  'api::rebel-of-the-week.rebel-of-the-week',
   'api::newsletter-config.newsletter-config',
   'api::newsletter-subscription.newsletter-subscription',
   'api::newsletter-campaign.newsletter-campaign',
@@ -142,6 +143,11 @@ async function setRoleContentPermissions(
     await ensurePermission(strapi, roleId, 'api::youtube-source.youtube-source.sync')
     await ensurePermission(strapi, roleId, 'api::youtube-source.youtube-source.syncAll')
     await ensurePermission(strapi, roleId, 'api::show.show.sync')
+    await ensurePermission(
+      strapi,
+      roleId,
+      'api::rebel-of-the-week.rebel-of-the-week.resolveTrackLink',
+    )
     await ensurePermission(strapi, roleId, 'plugin::upload.content-api.upload')
     await ensurePermission(strapi, roleId, 'api::media-upload.media-upload.upload')
     await ensurePermission(strapi, roleId, 'api::document-actions.document-actions.publish')
@@ -990,6 +996,8 @@ async function seedDemoContent(strapi: Core.Strapi) {
     })
   }
 
+  await ensureRebelOfTheWeek(strapi)
+
   const launchSettings = await strapi
     .documents('api::launch-settings.launch-settings')
     .findMany({ limit: 1 })
@@ -1005,6 +1013,363 @@ async function seedDemoContent(strapi: Core.Strapi) {
   }
 
   strapi.log.info('Demo content seed complete')
+}
+
+/** Ensure at least one published Rebel of the Week entry exists for /rebel. */
+async function ensureRebelOfTheWeek(strapi: Core.Strapi) {
+  const uid = 'api::rebel-of-the-week.rebel-of-the-week' as const
+
+  function sectionId() {
+    return `sec_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+  }
+
+  function defaultSections() {
+    return [
+      {
+        id: sectionId(),
+        type: 'hero',
+        layout: 'fullBleed',
+        eyebrow: 'REBEL OF THE WEEK',
+        name: 'TYLA',
+        blurb:
+          'Johannesburg to the world. The artist turning South African rhythm, movement and self-belief into a new global language.',
+        ctaLabel: "MEET THIS WEEK'S REBEL",
+        image: null,
+      },
+      {
+        id: sectionId(),
+        type: 'intro',
+        layout: 'twoCol',
+        label: 'WHO IS TYLA?',
+        headline: 'THE GIRL FROM JOBURG WHO MADE THE WORLD MOVE.',
+        quote: 'I always wanted to be the first me, not the next anyone.',
+        bioLeft:
+          'Born and raised in Johannesburg, Tyla Laura Seethal grew up inside a rich collision of sound: amapiano basslines, R&B melodies, pop spectacle and the kinetic pulse of South African dance.',
+        bioRight:
+          "Her answer is 'popiano' — a fluid world that belongs everywhere without surrendering where it comes from. The music is polished, but the attitude remains instinctive: playful, proud and impossible to copy.",
+      },
+      {
+        id: sectionId(),
+        type: 'breakthrough',
+        layout: 'imageLeft',
+        label: 'THE BREAKTHROUGH',
+        titleWhite: 'ONE DROP.',
+        titleRed: 'A TIDAL WAVE.',
+        body:
+          "When 'Water' arrived, it did more than soundtrack a dance challenge. It brought the sensual snap of Bacardi dance into living rooms across continents — on its own terms. The record reached the Billboard Hot 100 top ten and helped open a new Grammy chapter for African music.",
+        caption: 'PORTRAIT STUDY / JOHANNESBURG ENERGY',
+        image: null,
+        stats: [
+          { value: '#7', label: 'US HOT 100 PEAK' },
+          { value: '1B+', label: 'GLOBAL STREAMS' },
+        ],
+      },
+      {
+        id: sectionId(),
+        type: 'ascent',
+        layout: 'grid4',
+        label: 'THE ASCENT',
+        title: 'A REBEL IN MOTION',
+        range: '2019 — TODAY',
+        milestones: [
+          {
+            year: '2019',
+            title: 'THE FIRST SPARK',
+            body: 'Tyla introduces her sound with Getting Late — a meeting point between R&B ease and South African rhythm.',
+          },
+          {
+            year: '2023',
+            title: 'WATER MOVES THE WORLD',
+            body: 'A hypnotic hook and a viral Bacardi-inspired dance turn a homegrown record into a global pop phenomenon.',
+          },
+          {
+            year: '2024',
+            title: 'HISTORY, MADE',
+            body: 'Water earns the inaugural Grammy for Best African Music Performance. Her self-titled debut album follows.',
+          },
+          {
+            year: 'NOW',
+            title: 'A WORLD OF HER OWN',
+            body: 'With a new visual language and a borderless fanbase, Tyla continues to expand what African pop can look and feel like.',
+          },
+        ],
+      },
+      {
+        id: sectionId(),
+        type: 'quote',
+        layout: 'split',
+        text: 'BEING AFRICAN IS THE COOL THING. THE WORLD IS FINALLY CATCHING UP.',
+        accent: 'THE COOL THING',
+        image: null,
+      },
+      {
+        id: sectionId(),
+        type: 'listening',
+        layout: 'tracksAlbum',
+        label: 'ESSENTIAL LISTENING',
+        title: 'PRESS PLAY',
+        tracks: [
+          {
+            title: 'WATER',
+            duration: '3:20',
+            url: 'https://open.spotify.com/track/5aIVCx5tnk0ntmdiinnYvw',
+          },
+          {
+            title: 'TRUTH OR DARE',
+            duration: '3:10',
+            url: 'https://www.youtube.com/watch?v=UKpz-I9EV84',
+          },
+          {
+            title: 'JUMP',
+            duration: '2:55',
+            url: 'https://open.spotify.com/track/0ve0CavjqrUqVmZ605RhTV',
+          },
+          {
+            title: 'ART',
+            duration: '3:05',
+            url: 'https://www.youtube.com/watch?v=mGyN2NMuS4A',
+          },
+        ],
+        albumEyebrow: 'DEBUT ALBUM',
+        albumName: 'TYLA',
+        albumDescription:
+          'A vivid, self-assured debut; intimate R&B, amapiano swing and global pop scale in one unmistakable voice.',
+        albumCtaLabel: 'LISTEN TO THE ALBUM',
+        albumUrl: 'https://open.spotify.com/album/3KGVOGmIbinlrR97aFufGE',
+        albumMonogram: 'T',
+      },
+      {
+        id: sectionId(),
+        type: 'awards',
+        layout: 'grid4',
+        label: 'BY THE NUMBERS',
+        title: 'THE TROPHY SHELF',
+        awards: [
+          { title: 'GRAMMY AWARD', description: 'BEST AFRICAN MUSIC PERFORMANCE' },
+          { title: 'BILLBOARD HOT 100', description: "TOP 10 WITH 'WATER'" },
+          { title: 'MTV VMA', description: 'BEST AFROBEATS' },
+          { title: 'BET AWARDS', description: 'BEST NEW ARTIST / INTERNATIONAL ACT' },
+        ],
+      },
+      {
+        id: sectionId(),
+        type: 'whatsNext',
+        layout: 'split',
+        label: "WHAT'S NEXT",
+        headline: 'THE NEXT WAVE IS LOADING.',
+        body:
+          "New music, bigger stages and a visual world that keeps evolving. Official dates and project announcements land first through Tyla's channels.",
+        ctaLabel: 'FOLLOW OFFICIAL UPDATES',
+        ctaUrl: '',
+        items: [
+          { title: 'JOHANNESBURG · HOMECOMING', subtitle: 'DATES VIA OFFICIAL CHANNELS', url: '' },
+          { title: 'LONDON · FESTIVAL SEASON', subtitle: 'DATES VIA OFFICIAL CHANNELS', url: '' },
+          { title: 'NEW YORK · LIVE STAGE', subtitle: 'DATES VIA OFFICIAL CHANNELS', url: '' },
+          {
+            title: 'GLOBAL · MORE TO BE ANNOUNCED',
+            subtitle: 'DATES VIA OFFICIAL CHANNELS',
+            url: '',
+          },
+        ],
+      },
+      {
+        id: sectionId(),
+        type: 'dropCta',
+        layout: 'split',
+        eyebrow: "NEXT WEEK'S REBEL",
+        headline: 'NEVER MISS THE DROP.',
+        placeholder: 'YOUR EMAIL ADDRESS',
+        ctaLabel: 'JOIN',
+      },
+    ]
+  }
+
+  function mediaRef(value: unknown): { id: number; url: string; alternativeText?: string | null } | null {
+    if (!value || typeof value !== 'object') return null
+    const row = value as { id?: number; url?: string; alternativeText?: string | null }
+    const id = Number(row.id)
+    const url = typeof row.url === 'string' ? row.url : ''
+    if (!Number.isFinite(id) || id <= 0 || !url) return null
+    return { id, url, alternativeText: row.alternativeText ?? null }
+  }
+
+  function legacyToSections(doc: Record<string, unknown>) {
+    const sections: Record<string, unknown>[] = []
+    if (doc.heroName || doc.heroBlurb || doc.heroImage) {
+      sections.push({
+        id: sectionId(),
+        type: 'hero',
+        layout: 'fullBleed',
+        eyebrow: doc.heroEyebrow || 'REBEL OF THE WEEK',
+        name: doc.heroName || '',
+        blurb: doc.heroBlurb || '',
+        ctaLabel: doc.heroCtaLabel || "MEET THIS WEEK'S REBEL",
+        image: mediaRef(doc.heroImage),
+      })
+    }
+    if (doc.introHeadline || doc.introQuote || doc.introBioLeft || doc.introBioRight) {
+      sections.push({
+        id: sectionId(),
+        type: 'intro',
+        layout: 'twoCol',
+        label: doc.introLabel || '',
+        headline: doc.introHeadline || '',
+        quote: doc.introQuote || '',
+        bioLeft: doc.introBioLeft || '',
+        bioRight: doc.introBioRight || '',
+      })
+    }
+    if (doc.breakthroughBody || doc.breakthroughImage || doc.breakthroughTitleWhite) {
+      sections.push({
+        id: sectionId(),
+        type: 'breakthrough',
+        layout: 'imageLeft',
+        label: doc.breakthroughLabel || '',
+        titleWhite: doc.breakthroughTitleWhite || '',
+        titleRed: doc.breakthroughTitleRed || '',
+        body: doc.breakthroughBody || '',
+        caption: doc.breakthroughCaption || '',
+        image: mediaRef(doc.breakthroughImage),
+        stats: Array.isArray(doc.breakthroughStats) ? doc.breakthroughStats : [],
+      })
+    }
+    if (doc.ascentTitle || (Array.isArray(doc.milestones) && doc.milestones.length)) {
+      sections.push({
+        id: sectionId(),
+        type: 'ascent',
+        layout: 'grid4',
+        label: doc.ascentLabel || '',
+        title: doc.ascentTitle || '',
+        range: doc.ascentRange || '',
+        milestones: Array.isArray(doc.milestones) ? doc.milestones : [],
+      })
+    }
+    if (doc.quoteText) {
+      sections.push({
+        id: sectionId(),
+        type: 'quote',
+        layout: 'split',
+        text: doc.quoteText || '',
+        accent: doc.quoteAccent || '',
+        image: mediaRef(doc.quoteImage),
+      })
+    }
+    if (doc.listeningTitle || doc.albumName || (Array.isArray(doc.tracks) && doc.tracks.length)) {
+      sections.push({
+        id: sectionId(),
+        type: 'listening',
+        layout: 'tracksAlbum',
+        label: doc.listeningLabel || '',
+        title: doc.listeningTitle || '',
+        tracks: Array.isArray(doc.tracks) ? doc.tracks : [],
+        albumEyebrow: doc.albumEyebrow || '',
+        albumName: doc.albumName || '',
+        albumDescription: doc.albumDescription || '',
+        albumCtaLabel: doc.albumCtaLabel || '',
+        albumUrl: doc.albumUrl || '',
+        albumMonogram: doc.albumMonogram || '',
+      })
+    }
+    if (Array.isArray(doc.awards) && doc.awards.length) {
+      sections.push({
+        id: sectionId(),
+        type: 'awards',
+        layout: 'grid4',
+        label: doc.awardsLabel || '',
+        title: doc.awardsTitle || '',
+        awards: doc.awards,
+      })
+    }
+    if (doc.nextHeadline || (Array.isArray(doc.nextItems) && doc.nextItems.length)) {
+      sections.push({
+        id: sectionId(),
+        type: 'whatsNext',
+        layout: 'split',
+        label: doc.nextLabel || '',
+        headline: doc.nextHeadline || '',
+        body: doc.nextBody || '',
+        ctaLabel: doc.nextCtaLabel || '',
+        ctaUrl: doc.nextCtaUrl || '',
+        items: Array.isArray(doc.nextItems) ? doc.nextItems : [],
+      })
+    }
+    if (doc.dropHeadline || doc.dropEyebrow) {
+      sections.push({
+        id: sectionId(),
+        type: 'dropCta',
+        layout: 'split',
+        eyebrow: doc.dropEyebrow || '',
+        headline: doc.dropHeadline || '',
+        placeholder: doc.dropPlaceholder || '',
+        ctaLabel: doc.dropCtaLabel || '',
+      })
+    }
+    return sections
+  }
+
+  const existing = await strapi.documents(uid).findMany({
+    limit: 20,
+    populate: ['heroImage', 'breakthroughImage', 'quoteImage'],
+  })
+
+  if (existing.length) {
+    const nowIso = new Date().toISOString()
+    for (const doc of existing) {
+      const row = doc as Record<string, unknown> & { documentId: string }
+      const slug = typeof row.slug === 'string' ? row.slug.trim() : ''
+      const rawStart = row.weekStartsAt
+      const weekStartsAt =
+        typeof rawStart === 'string' && rawStart
+          ? rawStart
+          : rawStart instanceof Date
+            ? rawStart.toISOString()
+            : null
+      const sectionsRaw = row.sections
+      const hasSections = Array.isArray(sectionsRaw) && sectionsRaw.length > 0
+      const patch: Record<string, unknown> = {}
+      if (!slug) {
+        patch.slug = 'tyla'
+        patch.heroName =
+          typeof row.heroName === 'string' && row.heroName ? row.heroName : 'TYLA'
+      }
+      if (!weekStartsAt) patch.weekStartsAt = nowIso
+      if (!hasSections) {
+        const migrated = legacyToSections(row)
+        patch.sections = migrated.length ? migrated : defaultSections()
+        if (!patch.heroName) {
+          const hero = (patch.sections as { type?: string; name?: string }[]).find(
+            (s) => s.type === 'hero',
+          )
+          patch.heroName = hero?.name || 'TYLA'
+        }
+      }
+      if (!Object.keys(patch).length) continue
+
+      await strapi.documents(uid).update({
+        documentId: row.documentId,
+        data: patch as never,
+        status: 'published',
+      })
+    }
+    strapi.log.info('Ensured rebel-of-the-week collection entries are publishable')
+    return
+  }
+
+  const sections = defaultSections()
+  await strapi.documents(uid).create({
+    data: {
+      slug: 'tyla',
+      weekStartsAt: new Date().toISOString(),
+      weekLabel: '001',
+      seoTitle: 'REBEL — Rebel of the Week',
+      seoDescription:
+        'Meet this week’s Rebel — artists reshaping African and Black creative culture.',
+      heroName: 'TYLA',
+      sections,
+    } as never,
+    status: 'published',
+  })
+  strapi.log.info('Ensured rebel-of-the-week collection has a published seed entry')
 }
 
 const DEFAULT_STUDIO_GENRES = [
@@ -1399,6 +1764,14 @@ export default {
     }
 
     try {
+      await ensureRebelOfTheWeek(strapi)
+    } catch (error) {
+      strapi.log.warn(
+        `ensureRebelOfTheWeek failed: ${error instanceof Error ? error.message : 'unknown'}`,
+      )
+    }
+
+    try {
       const {
         syncAllYoutubeSourcesToMediaSources,
         linkPlaylistsToYoutubeMediaSources,
@@ -1457,6 +1830,7 @@ export default {
         'api::homepage-settings.homepage-settings',
         'api::launch-settings.launch-settings',
         'api::about-page.about-page',
+        'api::rebel-of-the-week.rebel-of-the-week',
         'api::newsletter-config.newsletter-config',
       ],
       async afterCreate() {
