@@ -1,13 +1,15 @@
 {
-  "kind": "singleType",
+  "kind": "collectionType",
   "collectionName": "rebel_of_the_weeks",
   "info": {
     "singularName": "rebel-of-the-week",
     "pluralName": "rebel-of-the-weeks",
     "displayName": "Rebel of the Week"
   },
-  "options": { "draftAndPublish": false },
+  "options": { "draftAndPublish": true },
   "attributes": {
+    "slug": { "type": "uid", "targetField": "heroName", "required": true },
+    "weekStartsAt": { "type": "datetime", "required": true },
     "weekLabel": { "type": "string", "maxLength": 20, "default": "001" },
     "seoTitle": { "type": "string", "maxLength": 70 },
     "seoDescription": { "type": "text", "maxLength": 160 },
@@ -16,6 +18,7 @@
       "relation": "manyToOne",
       "target": "api::artist.artist"
     },
+    "sections": { "type": "json" },
     "heroEyebrow": { "type": "string", "maxLength": 80 },
     "heroName": { "type": "string", "maxLength": 80 },
     "heroBlurb": { "type": "text", "maxLength": 400 },
