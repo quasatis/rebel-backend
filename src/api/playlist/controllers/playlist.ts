@@ -1,5 +1,9 @@
 ﻿import { factories } from '@strapi/strapi'
 import { normalizeYoutubePlaylistId } from '../../../utils/youtube-ids'
+import {
+  attachPublicPlaylistEmbeds,
+  playlistEmbedsByDocumentId,
+} from '../../../utils/youtube-media-source'
 
 type YoutubeSourceRef = {
   id?: number
@@ -88,6 +92,18 @@ function sortByPlaylistPosition(videos: SerializedVideo[]) {
 }
 
 export default factories.createCoreController('api::playlist.playlist', ({ strapi }) => ({
+  async find(ctx) {
+    const response = await super.find(ctx)
+    await attachPublicPlaylistEmbeds(strapi, response)
+    return response
+  },
+
+  async findOne(ctx) {
+    const response = await super.findOne(ctx)
+    await attachPublicPlaylistEmbeds(strapi, response)
+    return response
+  },
+
   async videos(ctx) {
     const slug = String(ctx.params.slug || '').trim()
     if (!slug) {
@@ -109,8 +125,20 @@ export default factories.createCoreController('api::playlist.playlist', ({ strap
       return ctx.notFound('Playlist not found')
     }
 
-    const youtubeSource = playlist.youtubeSource as YoutubeSourceRef | null | undefined
-    const mediaSource = playlist.mediaSource as MediaSourceRef | null | undefined
+    const documentId = String(playlist.documentId || '').trim()
+    const embeds = documentId
+      ? await playlistEmbedsByDocumentId(strapi, [documentId])
+      : new Map()
+    const richest = embeds.get(documentId)
+
+    const youtubeSource = (richest?.youtubeSource || playlist.youtubeSource) as
+      | YoutubeSourceRef
+      | null
+      | undefined
+    const mediaSource = (richest?.mediaSource || playlist.mediaSource) as
+      | MediaSourceRef
+      | null
+      | undefined
     const resolved = resolveYoutubeSourceRef(youtubeSource, mediaSource)
     if (!resolved?.documentId) {
       ctx.body = { data: [] }

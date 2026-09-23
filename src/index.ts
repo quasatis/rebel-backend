@@ -65,14 +65,14 @@ async function setPublicPermissions(strapi: Core.Strapi) {
   })
   if (!publicRole) return
 
-  // Synced YouTube rows and YouTube source configs stay BO-only.
-  // MediaSource stays public so FO can populate embeds on published content.
+  // Writes and synced-video rows stay BO-only. Public needs youtube-source
+  // find/findOne so FO can populate playlist/show embeds (mediaSource is the
+  // fallback path and is often empty on published rows).
   const publicDenied = new Set([
     'api::newsletter-subscription.newsletter-subscription',
     'api::newsletter-campaign.newsletter-campaign',
     'api::contact-message.contact-message',
     'api::media-traffic-event.media-traffic-event',
-    'api::youtube-source.youtube-source',
     'api::synced-video.synced-video',
   ])
 
@@ -85,13 +85,19 @@ async function setPublicPermissions(strapi: Core.Strapi) {
 
   for (const uid of [
     'api::synced-video.synced-video',
-    'api::youtube-source.youtube-source',
     'api::media-traffic-event.media-traffic-event',
   ]) {
     for (const action of ['find', 'findOne', 'create', 'update', 'delete']) {
       await revokePermission(strapi, publicRole.id, `${uid}.${action}`)
     }
   }
+
+  for (const action of ['create', 'update', 'delete', 'sync', 'syncAll']) {
+    await revokePermission(strapi, publicRole.id, `api::youtube-source.youtube-source.${action}`)
+  }
+
+  await ensurePermission(strapi, publicRole.id, 'plugin::upload.content-api.find')
+  await ensurePermission(strapi, publicRole.id, 'plugin::upload.content-api.findOne')
 
   await ensurePermission(
     strapi,
