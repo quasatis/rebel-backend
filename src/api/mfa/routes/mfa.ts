@@ -1,6 +1,8 @@
 /**
  * Backoffice MFA (email OTP + authenticator TOTP).
- * Authenticated routes use user.me scope (same pattern as backoffice-users).
+ * Session routes are `auth: false` so a valid JWT is not rejected by Users &
+ * Permissions when `user.me` was never granted on the role. Controllers still
+ * require a bearer token via `requireAuthUser`.
  */
 export default {
   type: 'content-api',
@@ -30,7 +32,7 @@ export default {
       config: {
         policies: [],
         middlewares: [],
-        auth: { scope: ['plugin::users-permissions.user.me'] },
+        auth: false,
       },
     },
     {
@@ -40,7 +42,7 @@ export default {
       config: {
         policies: [],
         middlewares: [],
-        auth: { scope: ['plugin::users-permissions.user.me'] },
+        auth: false,
       },
     },
     {
@@ -50,7 +52,7 @@ export default {
       config: {
         policies: [],
         middlewares: [],
-        auth: { scope: ['plugin::users-permissions.user.me'] },
+        auth: false,
       },
     },
     {
@@ -60,7 +62,7 @@ export default {
       config: {
         policies: [],
         middlewares: [],
-        auth: { scope: ['plugin::users-permissions.user.me'] },
+        auth: false,
       },
     },
     {
@@ -70,7 +72,7 @@ export default {
       config: {
         policies: [],
         middlewares: [],
-        auth: { scope: ['plugin::users-permissions.user.me'] },
+        auth: false,
       },
     },
     {
@@ -80,7 +82,7 @@ export default {
       config: {
         policies: [],
         middlewares: [],
-        auth: { scope: ['plugin::users-permissions.user.me'] },
+        auth: false,
       },
     },
     {
@@ -90,7 +92,7 @@ export default {
       config: {
         policies: [],
         middlewares: [],
-        auth: { scope: ['plugin::users-permissions.user.me'] },
+        auth: false,
       },
     },
     {
@@ -100,7 +102,7 @@ export default {
       config: {
         policies: [],
         middlewares: [],
-        auth: { scope: ['plugin::users-permissions.user.me'] },
+        auth: false,
       },
     },
     {
@@ -110,7 +112,7 @@ export default {
       config: {
         policies: [],
         middlewares: [],
-        auth: { scope: ['plugin::users-permissions.user.me'] },
+        auth: false,
       },
     },
     {
@@ -120,7 +122,7 @@ export default {
       config: {
         policies: [],
         middlewares: [],
-        auth: { scope: ['plugin::users-permissions.user.me'] },
+        auth: false,
       },
     },
   ],
