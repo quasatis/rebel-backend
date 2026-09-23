@@ -157,13 +157,29 @@ export default ({ strapi }: { strapi: any }) => {
     })) as MfaUser
   }
 
+  async function userIdFromRequest(ctx: any): Promise<number | null> {
+    const fromState = Number(ctx.state?.user?.id)
+    if (Number.isFinite(fromState) && fromState > 0) return fromState
+
+    const header = String(ctx.request?.header?.authorization || '')
+    const [scheme, token] = header.split(/\s+/)
+    if (scheme?.toLowerCase() !== 'bearer' || !token) return null
+    try {
+      const payload = (await jwtService().verify(token)) as { id?: number | string }
+      const id = Number(payload?.id)
+      return Number.isFinite(id) && id > 0 ? id : null
+    } catch {
+      return null
+    }
+  }
+
   async function requireAuthUser(ctx: any): Promise<MfaUser | null> {
-    const authUser = ctx.state?.user
-    if (!authUser?.id) {
+    const userId = await userIdFromRequest(ctx)
+    if (!userId) {
       ctx.unauthorized('Authentication required')
       return null
     }
-    const user = await loadUserById(authUser.id)
+    const user = await loadUserById(userId)
     if (!user || user.blocked) {
       ctx.unauthorized('Authentication required')
       return null

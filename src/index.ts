@@ -139,6 +139,8 @@ async function setRoleContentPermissions(
   await ensurePermission(strapi, roleId, 'plugin::upload.content-api.find')
   await ensurePermission(strapi, roleId, 'plugin::upload.content-api.findOne')
   await ensurePermission(strapi, roleId, 'plugin::users-permissions.user.me')
+  await ensurePermission(strapi, roleId, 'api::mfa.mfa.me')
+  await ensurePermission(strapi, roleId, 'api::mfa.mfa.status')
 
   if (mode === 'full') {
     await ensurePermission(strapi, roleId, 'api::youtube-source.youtube-source.sync')
