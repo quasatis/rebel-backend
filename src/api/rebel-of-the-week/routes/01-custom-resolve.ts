@@ -3,6 +3,7 @@
  * Filename sorts before the core router.
  */
 export default {
+  type: 'content-api',
   routes: [
     {
       method: 'GET',

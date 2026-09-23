@@ -3,6 +3,7 @@
  * Loaded before the core router (filename sorts first).
  */
 export default {
+  type: 'content-api',
   routes: [
     {
       method: 'POST',
