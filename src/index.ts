@@ -1,5 +1,6 @@
 import dns from 'node:dns'
 import type { Core } from '@strapi/strapi'
+import { restorePurgedContent } from './utils/restore-purged-content'
 
 // Docker Desktop on Windows advertises NAT64 IPv6 for Cloudinary that is unreachable.
 dns.setDefaultResultOrder('ipv4first')
@@ -1712,6 +1713,14 @@ export default {
         `Retired demo video cleanup skipped: ${
           error instanceof Error ? error.message : 'unknown'
         }`,
+      )
+    }
+
+    try {
+      await restorePurgedContent(strapi)
+    } catch (error) {
+      strapi.log.error(
+        `Purged content restore failed: ${error instanceof Error ? error.message : 'unknown'}`,
       )
     }
 
