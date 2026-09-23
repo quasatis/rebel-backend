@@ -54,3 +54,4 @@ public/uploads/*
 .tmp
 .temp
 coverage
+scripts/.rebel-weeks-local.json
