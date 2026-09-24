@@ -46,6 +46,12 @@
     "actorEmail": {
       "type": "string"
     },
+    "actorFirstName": {
+      "type": "string"
+    },
+    "actorLastName": {
+      "type": "string"
+    },
     "actorRole": {
       "type": "string"
     },

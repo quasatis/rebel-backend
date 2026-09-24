@@ -1,7 +1,15 @@
-function mfaActor(user: { id?: number; email?: string; role?: { type?: string; name?: string } | number | null }) {
+function mfaActor(user: {
+  id?: number
+  email?: string
+  firstName?: string | null
+  lastName?: string | null
+  role?: { type?: string; name?: string } | number | null
+}) {
   return {
     id: user?.id,
     email: user?.email,
+    firstName: user?.firstName,
+    lastName: user?.lastName,
     role:
       user?.role && typeof user.role === 'object'
         ? user.role.type || user.role.name
@@ -13,7 +21,13 @@ export default ({ strapi }: { strapi: any }) => {
   const service = () => strapi.service('api::mfa.mfa')
   const audit = () => strapi.service('api::audit-log.audit-log')
 
-  async function logLogin(ctx: any, user: { id?: number; email?: string; role?: { type?: string; name?: string } | number | null }) {
+  async function logLogin(ctx: any, user: {
+    id?: number
+    email?: string
+    firstName?: string | null
+    lastName?: string | null
+    role?: { type?: string; name?: string } | number | null
+  }) {
     await audit().writeLog({
       action: 'login',
       resourceType: 'user',
@@ -26,7 +40,13 @@ export default ({ strapi }: { strapi: any }) => {
 
   async function logMfaChange(
     ctx: any,
-    user: { id?: number; email?: string; role?: { type?: string; name?: string } | number | null },
+    user: {
+      id?: number
+      email?: string
+      firstName?: string | null
+      lastName?: string | null
+      role?: { type?: string; name?: string } | number | null
+    },
     kind: string,
   ) {
     await audit().writeLog({

@@ -53,6 +53,8 @@ export const AUDIT_LIFECYCLE_UIDS = [
 export type AuditActor = {
   actorUserId: string
   actorEmail: string
+  actorFirstName: string
+  actorLastName: string
   actorRole: string
 }
 
@@ -65,6 +67,8 @@ export type WriteLogInput = {
   actor?: {
     id?: number | string | null
     email?: string | null
+    firstName?: string | null
+    lastName?: string | null
     role?: string | null
   } | null
   ctx?: any
@@ -117,10 +121,98 @@ function getRequestContext(strapi: any, ctx?: any) {
   }
 }
 
+function requestHeader(ctx: any, name: string): string {
+  const headers = ctx?.request?.header || ctx?.headers || {}
+  const raw = headers[name] ?? headers[name.toLowerCase()]
+  if (Array.isArray(raw)) return asString(raw[0], 400)
+  return asString(raw, 400)
+}
+
+function firstIp(value: string): string {
+  return asString(value.split(',')[0], 80)
+}
+
 function requestIp(ctx: any, fallback?: string | null) {
-  if (fallback) return asString(fallback, 80)
-  if (!ctx) return ''
-  return asString(ctx.ip || ctx.request?.ip || ctx.request?.header?.['x-forwarded-for'], 80)
+  const candidates = [
+    fallback,
+    requestHeader(ctx, 'cf-connecting-ip'),
+    requestHeader(ctx, 'true-client-ip'),
+    requestHeader(ctx, 'x-real-ip'),
+    requestHeader(ctx, 'x-forwarded-for'),
+    ctx?.ip,
+    ctx?.request?.ip,
+  ]
+  for (const raw of candidates) {
+    const ip = firstIp(String(raw || ''))
+    if (ip) return ip
+  }
+  return ''
+}
+
+function parseUserAgent(ua: string) {
+  const value = asString(ua, 400)
+  if (!value) {
+    return { userAgent: '', browser: '', os: '', device: '' }
+  }
+
+  const bot = /bot|crawler|spider|slurp|preview/i.test(value)
+  let device = 'Desktop'
+  if (bot) device = 'Bot'
+  else if (/ipad|tablet|playbook|silk/i.test(value)) device = 'Tablet'
+  else if (/mobi|iphone|ipod|android.*mobile|windows phone/i.test(value)) device = 'Mobile'
+
+  let os = ''
+  if (/windows nt/i.test(value)) os = 'Windows'
+  else if (/mac os x/i.test(value)) os = /mobile|iphone|ipad/i.test(value) ? 'iOS' : 'macOS'
+  else if (/iphone|ipad|ipod/i.test(value)) os = 'iOS'
+  else if (/android/i.test(value)) os = 'Android'
+  else if (/cros/i.test(value)) os = 'Chrome OS'
+  else if (/linux/i.test(value)) os = 'Linux'
+
+  let browser = ''
+  if (/edg\//i.test(value)) browser = 'Edge'
+  else if (/opr\/|opera/i.test(value)) browser = 'Opera'
+  else if (/samsungbrowser/i.test(value)) browser = 'Samsung Internet'
+  else if (/chrome\/|crios\//i.test(value)) browser = 'Chrome'
+  else if (/firefox\/|fxios\//i.test(value)) browser = 'Firefox'
+  else if (/safari/i.test(value) && !/chrome|crios|android/i.test(value)) browser = 'Safari'
+
+  return { userAgent: value, browser, os, device }
+}
+
+function requestLocation(ctx: any) {
+  const country =
+    requestHeader(ctx, 'cf-ipcountry') ||
+    requestHeader(ctx, 'x-vercel-ip-country') ||
+    requestHeader(ctx, 'cloudfront-viewer-country') ||
+    requestHeader(ctx, 'x-country-code')
+  const region =
+    requestHeader(ctx, 'cf-region') ||
+    requestHeader(ctx, 'cf-region-code') ||
+    requestHeader(ctx, 'x-vercel-ip-country-region') ||
+    requestHeader(ctx, 'cloudfront-viewer-country-region')
+  const city =
+    requestHeader(ctx, 'cf-ipcity') ||
+    requestHeader(ctx, 'x-vercel-ip-city') ||
+    requestHeader(ctx, 'cloudfront-viewer-city')
+  return {
+    country: country && country !== 'XX' ? country : '',
+    region,
+    city,
+  }
+}
+
+export function requestContextFrom(ctx: any, fallbackIp?: string | null) {
+  const userAgent = requestHeader(ctx, 'user-agent')
+  const parsed = parseUserAgent(userAgent)
+  const location = requestLocation(ctx)
+  const language = asString(requestHeader(ctx, 'accept-language').split(',')[0], 40)
+  return {
+    ip: requestIp(ctx, fallbackIp) || null,
+    ...parsed,
+    ...location,
+    language,
+  }
 }
 
 export default factories.createCoreService(AUDIT_LOG_UID, ({ strapi }) => ({
@@ -146,24 +238,39 @@ export default factories.createCoreService(AUDIT_LOG_UID, ({ strapi }) => ({
     if (!Number.isFinite(id) || id <= 0) return null
 
     let email = asString(authUser?.email, 180)
+    let firstName = asString(
+      (authUser as { firstName?: string | null })?.firstName,
+      80,
+    )
+    let lastName = asString((authUser as { lastName?: string | null })?.lastName, 80)
     let role = asString((authUser as { role?: string })?.role, 40)
     if (authUser && typeof (authUser as { role?: unknown }).role === 'object') {
       role = roleTypeOf(authUser as { role?: { type?: string; name?: string } })
     }
 
-    if (!email || !role) {
+    if (!email || !role || !firstName || !lastName) {
       const user = (await strapi.db.query('plugin::users-permissions.user').findOne({
         where: { id },
         populate: ['role'],
-      })) as { id: number; email?: string; role?: { type?: string; name?: string } } | null
+      })) as {
+        id: number
+        email?: string
+        firstName?: string | null
+        lastName?: string | null
+        role?: { type?: string; name?: string }
+      } | null
       if (!user) return null
       email = email || asString(user.email, 180)
+      firstName = firstName || asString(user.firstName, 80)
+      lastName = lastName || asString(user.lastName, 80)
       role = role || roleTypeOf(user)
     }
 
     const actor: AuditActor = {
       actorUserId: String(id),
       actorEmail: email,
+      actorFirstName: firstName,
+      actorLastName: lastName,
       actorRole: role,
     }
     if (request?.state) request.state.auditActor = actor
@@ -183,20 +290,28 @@ export default factories.createCoreService(AUDIT_LOG_UID, ({ strapi }) => ({
       const resourceType = asString(input.resourceType, 80)
       if (!action || !resourceType) return
 
+      const requestInfo = requestContextFrom(request, input.ip)
+      const extraMeta =
+        input.meta && typeof input.meta === 'object' && !Array.isArray(input.meta)
+          ? input.meta
+          : {}
+
       await strapi.db.query(AUDIT_LOG_UID).create({
         data: {
           action,
           actorUserId: actor.actorUserId,
           actorEmail: actor.actorEmail,
+          actorFirstName: actor.actorFirstName || null,
+          actorLastName: actor.actorLastName || null,
           actorRole: actor.actorRole,
           resourceType,
           resourceId: asString(input.resourceId, 80) || null,
           resourceLabel: asString(input.resourceLabel, 200) || null,
-          ip: requestIp(request, input.ip) || null,
-          meta:
-            input.meta && typeof input.meta === 'object' && !Array.isArray(input.meta)
-              ? input.meta
-              : null,
+          ip: requestInfo.ip,
+          meta: {
+            ...extraMeta,
+            request: requestInfo,
+          },
           occurredAt: new Date(),
         },
       })
@@ -270,6 +385,8 @@ export default factories.createCoreService(AUDIT_LOG_UID, ({ strapi }) => ({
       filters.push({
         $or: [
           { actorEmail: { $containsi: search } },
+          { actorFirstName: { $containsi: search } },
+          { actorLastName: { $containsi: search } },
           { resourceLabel: { $containsi: search } },
           { resourceType: { $containsi: search } },
           { resourceId: { $containsi: search } },
