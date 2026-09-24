@@ -1,4 +1,5 @@
 import { factories } from '@strapi/strapi'
+import { lookupIpGeo, pickPublicIp } from '../../../utils/ip-geo'
 
 export const AUDIT_LOG_UID = 'api::audit-log.audit-log' as const
 
@@ -128,12 +129,8 @@ function requestHeader(ctx: any, name: string): string {
   return asString(raw, 400)
 }
 
-function firstIp(value: string): string {
-  return asString(value.split(',')[0], 80)
-}
-
 function requestIp(ctx: any, fallback?: string | null) {
-  const candidates = [
+  return pickPublicIp([
     fallback,
     requestHeader(ctx, 'cf-connecting-ip'),
     requestHeader(ctx, 'true-client-ip'),
@@ -141,12 +138,7 @@ function requestIp(ctx: any, fallback?: string | null) {
     requestHeader(ctx, 'x-forwarded-for'),
     ctx?.ip,
     ctx?.request?.ip,
-  ]
-  for (const raw of candidates) {
-    const ip = firstIp(String(raw || ''))
-    if (ip) return ip
-  }
-  return ''
+  ])
 }
 
 function parseUserAgent(ua: string) {
@@ -202,15 +194,27 @@ function requestLocation(ctx: any) {
   }
 }
 
-export function requestContextFrom(ctx: any, fallbackIp?: string | null) {
+export async function requestContextFrom(ctx: any, fallbackIp?: string | null) {
   const userAgent = requestHeader(ctx, 'user-agent')
   const parsed = parseUserAgent(userAgent)
-  const location = requestLocation(ctx)
+  const headerLocation = requestLocation(ctx)
   const language = asString(requestHeader(ctx, 'accept-language').split(',')[0], 40)
+  const seenIp = requestIp(ctx, fallbackIp)
+  const geo = await lookupIpGeo(seenIp)
+  const ip = geo?.queryIp || seenIp
   return {
-    ip: requestIp(ctx, fallbackIp) || null,
+    ip: ip || null,
     ...parsed,
-    ...location,
+    asn: geo?.asn || '',
+    isp: geo?.isp || geo?.org || '',
+    org: geo?.org || '',
+    services: geo?.services || '',
+    country: geo?.country || headerLocation.country,
+    countryCode: geo?.countryCode || '',
+    region: geo?.region || headerLocation.region,
+    city: geo?.city || headerLocation.city,
+    latitude: geo?.latitude || '',
+    longitude: geo?.longitude || '',
     language,
   }
 }
@@ -290,7 +294,7 @@ export default factories.createCoreService(AUDIT_LOG_UID, ({ strapi }) => ({
       const resourceType = asString(input.resourceType, 80)
       if (!action || !resourceType) return
 
-      const requestInfo = requestContextFrom(request, input.ip)
+      const requestInfo = await requestContextFrom(request, input.ip)
       const extraMeta =
         input.meta && typeof input.meta === 'object' && !Array.isArray(input.meta)
           ? input.meta
@@ -408,7 +412,7 @@ export default factories.createCoreService(AUDIT_LOG_UID, ({ strapi }) => ({
     ])
 
     return {
-      data: await hydrateActorNames(strapi, results),
+      data: await hydrateRequestGeo(strapi, await hydrateActorNames(strapi, results)),
       meta: {
         pagination: {
           page,
@@ -423,7 +427,10 @@ export default factories.createCoreService(AUDIT_LOG_UID, ({ strapi }) => ({
   async findLog(id: number) {
     const row = await strapi.db.query(AUDIT_LOG_UID).findOne({ where: { id } })
     if (!row) return null
-    const [hydrated] = await hydrateActorNames(strapi, [row])
+    const [hydrated] = await hydrateRequestGeo(
+      strapi,
+      await hydrateActorNames(strapi, [row]),
+    )
     return hydrated
   },
 }))
@@ -453,4 +460,59 @@ async function hydrateActorNames(strapi: any, rows: Record<string, unknown>[]) {
       actorLastName: asString(row.actorLastName, 80) || asString(user.lastName, 80) || null,
     }
   })
+}
+
+function requestFromMeta(row: Record<string, unknown>) {
+  const meta = row.meta && typeof row.meta === 'object' && !Array.isArray(row.meta)
+    ? (row.meta as Record<string, unknown>)
+    : {}
+  const request =
+    meta.request && typeof meta.request === 'object' && !Array.isArray(meta.request)
+      ? { ...(meta.request as Record<string, unknown>) }
+      : {}
+  return { meta, request }
+}
+
+async function hydrateRequestGeo(strapi: any, rows: Record<string, unknown>[]) {
+  return Promise.all(
+    rows.map(async (row) => {
+      const { meta, request } = requestFromMeta(row)
+      if (asString(request.country) || asString(request.asn) || asString(request.isp)) {
+        return row
+      }
+
+      const geo = await lookupIpGeo(asString(request.ip || row.ip, 80))
+      if (!geo) return row
+
+      const nextRequest = {
+        ...request,
+        ip: geo.queryIp || request.ip || row.ip || null,
+        asn: geo.asn,
+        isp: geo.isp || geo.org,
+        org: geo.org,
+        services: geo.services,
+        country: geo.country,
+        countryCode: geo.countryCode,
+        region: geo.region,
+        city: geo.city,
+        latitude: geo.latitude,
+        longitude: geo.longitude,
+      }
+      const nextMeta = { ...meta, request: nextRequest }
+
+      try {
+        await strapi.db.query(AUDIT_LOG_UID).update({
+          where: { id: row.id },
+          data: {
+            ip: nextRequest.ip || row.ip || null,
+            meta: nextMeta,
+          },
+        })
+      } catch {
+        // Display the lookup even if the backfill write fails.
+      }
+
+      return { ...row, ip: nextRequest.ip || row.ip, meta: nextMeta }
+    }),
+  )
 }
