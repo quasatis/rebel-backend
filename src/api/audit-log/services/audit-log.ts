@@ -408,7 +408,7 @@ export default factories.createCoreService(AUDIT_LOG_UID, ({ strapi }) => ({
     ])
 
     return {
-      data: results,
+      data: await hydrateActorNames(strapi, results),
       meta: {
         pagination: {
           page,
@@ -421,6 +421,36 @@ export default factories.createCoreService(AUDIT_LOG_UID, ({ strapi }) => ({
   },
 
   async findLog(id: number) {
-    return strapi.db.query(AUDIT_LOG_UID).findOne({ where: { id } })
+    const row = await strapi.db.query(AUDIT_LOG_UID).findOne({ where: { id } })
+    if (!row) return null
+    const [hydrated] = await hydrateActorNames(strapi, [row])
+    return hydrated
   },
 }))
+
+async function hydrateActorNames(strapi: any, rows: Record<string, unknown>[]) {
+  const ids = [
+    ...new Set(
+      rows
+        .map((row) => Number(row.actorUserId))
+        .filter((id) => Number.isFinite(id) && id > 0),
+    ),
+  ]
+  if (!ids.length) return rows
+
+  const users = (await strapi.db.query('plugin::users-permissions.user').findMany({
+    where: { id: { $in: ids } },
+    select: ['id', 'firstName', 'lastName'],
+  })) as Array<{ id: number; firstName?: string | null; lastName?: string | null }>
+
+  const byId = new Map(users.map((user) => [String(user.id), user]))
+  return rows.map((row) => {
+    const user = byId.get(String(row.actorUserId || ''))
+    if (!user) return row
+    return {
+      ...row,
+      actorFirstName: asString(row.actorFirstName, 80) || asString(user.firstName, 80) || null,
+      actorLastName: asString(row.actorLastName, 80) || asString(user.lastName, 80) || null,
+    }
+  })
+}
