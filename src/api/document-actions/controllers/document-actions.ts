@@ -5,6 +5,10 @@ import {
   signPreviewToken,
   verifyPreviewToken,
 } from '../../../utils/preview-token'
+import {
+  labelFromEntity,
+  resourceTypeFromUid,
+} from '../../audit-log/services/audit-log'
 
 function uidFromCollection(strapi: any, collection: string): string | null {
   const plural = String(collection || '').trim()
@@ -92,8 +96,17 @@ export default ({ strapi }: { strapi: any }) => ({
     }
 
     const uid = resolveDraftPublishUid(strapi, collection, documentId)
+    const audit = strapi.service('api::audit-log.audit-log')
+    audit.skipLifecycleForRequest(ctx)
     const published = await strapi.documents(uid).publish({ documentId: String(documentId) })
     const entry = Array.isArray(published) ? published[0] : published
+    await audit.writeLog({
+      action: 'publish',
+      resourceType: resourceTypeFromUid(uid),
+      resourceId: String(documentId),
+      resourceLabel: labelFromEntity(entry) || String(documentId),
+      ctx,
+    })
     ctx.body = {
       data: {
         documentId: String(documentId),
@@ -109,8 +122,27 @@ export default ({ strapi }: { strapi: any }) => ({
     }
 
     const uid = resolveDraftPublishUid(strapi, collection, documentId)
-
+    const audit = strapi.service('api::audit-log.audit-log')
+    audit.skipLifecycleForRequest(ctx)
+    let label = String(documentId)
+    try {
+      const existing = await strapi.documents(uid).findOne({
+        documentId: String(documentId),
+        status: 'published',
+        fields: ['documentId', 'title', 'name', 'slug', 'subject'],
+      })
+      label = labelFromEntity(existing) || label
+    } catch {
+      // keep documentId
+    }
     await strapi.documents(uid).unpublish({ documentId: String(documentId) })
+    await audit.writeLog({
+      action: 'unpublish',
+      resourceType: resourceTypeFromUid(uid),
+      resourceId: String(documentId),
+      resourceLabel: label,
+      ctx,
+    })
     ctx.body = { data: { documentId: String(documentId), publishedAt: null } }
   },
 

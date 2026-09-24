@@ -1,5 +1,64 @@
+function mfaActor(user: {
+  id?: number
+  email?: string
+  firstName?: string | null
+  lastName?: string | null
+  role?: { type?: string; name?: string } | number | null
+}) {
+  return {
+    id: user?.id,
+    email: user?.email,
+    firstName: user?.firstName,
+    lastName: user?.lastName,
+    role:
+      user?.role && typeof user.role === 'object'
+        ? user.role.type || user.role.name
+        : null,
+  }
+}
+
 export default ({ strapi }: { strapi: any }) => {
   const service = () => strapi.service('api::mfa.mfa')
+  const audit = () => strapi.service('api::audit-log.audit-log')
+
+  async function logLogin(ctx: any, user: {
+    id?: number
+    email?: string
+    firstName?: string | null
+    lastName?: string | null
+    role?: { type?: string; name?: string } | number | null
+  }) {
+    await audit().writeLog({
+      action: 'login',
+      resourceType: 'user',
+      resourceId: user.id,
+      resourceLabel: user.email || String(user.id || ''),
+      actor: mfaActor(user),
+      ctx,
+    })
+  }
+
+  async function logMfaChange(
+    ctx: any,
+    user: {
+      id?: number
+      email?: string
+      firstName?: string | null
+      lastName?: string | null
+      role?: { type?: string; name?: string } | number | null
+    },
+    kind: string,
+  ) {
+    await audit().writeLog({
+      action: 'mfa_change',
+      resourceType: 'user',
+      resourceId: user.id,
+      resourceLabel: user.email || String(user.id || ''),
+      meta: { kind },
+      actor: mfaActor(user),
+      ctx,
+    })
+  }
 
   async function proveOwnership(
     svc: ReturnType<typeof service>,
@@ -55,6 +114,7 @@ export default ({ strapi }: { strapi: any }) => {
 
       if (!svc.mfaRequired(user)) {
         ctx.body = svc.issueJwt(user)
+        await logLogin(ctx, user)
         return
       }
 
@@ -149,6 +209,7 @@ export default ({ strapi }: { strapi: any }) => {
 
       svc.markChallengeUsed(jti, exp)
       ctx.body = svc.issueJwt(user)
+      await logLogin(ctx, user)
     },
 
     async status(ctx: any) {
@@ -187,6 +248,7 @@ export default ({ strapi }: { strapi: any }) => {
       try {
         const result = await svc.confirmTotp(user, code)
         const fresh = await svc.loadUserById(user.id)
+        await logMfaChange(ctx, fresh || user, 'totp_enable')
         ctx.body = {
           data: {
             ...(fresh ? svc.statusPayload(fresh) : {}),
@@ -207,6 +269,7 @@ export default ({ strapi }: { strapi: any }) => {
       if (err) return ctx.badRequest(err)
       await svc.disableTotp(user)
       const fresh = await svc.loadUserById(user.id)
+      await logMfaChange(ctx, fresh || user, 'totp_disable')
       ctx.body = { data: fresh ? svc.statusPayload(fresh) : { ok: true } }
     },
 
@@ -235,6 +298,7 @@ export default ({ strapi }: { strapi: any }) => {
       try {
         const result = await svc.confirmEmailEnable(user, code)
         const fresh = await svc.loadUserById(user.id)
+        await logMfaChange(ctx, fresh || user, 'email_enable')
         ctx.body = {
           data: {
             ...(fresh ? svc.statusPayload(fresh) : {}),
@@ -255,6 +319,7 @@ export default ({ strapi }: { strapi: any }) => {
       if (err) return ctx.badRequest(err)
       await svc.disableEmail(user)
       const fresh = await svc.loadUserById(user.id)
+      await logMfaChange(ctx, fresh || user, 'email_disable')
       ctx.body = { data: fresh ? svc.statusPayload(fresh) : { ok: true } }
     },
 
@@ -268,6 +333,7 @@ export default ({ strapi }: { strapi: any }) => {
       try {
         const codes = await svc.regenerateBackupCodes(user)
         const fresh = await svc.loadUserById(user.id)
+        await logMfaChange(ctx, fresh || user, 'backup_codes')
         ctx.body = {
           data: {
             ...(fresh ? svc.statusPayload(fresh) : {}),
@@ -290,6 +356,7 @@ export default ({ strapi }: { strapi: any }) => {
       if (!ok) return ctx.badRequest('Invalid password.')
       await svc.disableAll(user)
       const fresh = await svc.loadUserById(user.id)
+      await logMfaChange(ctx, fresh || user, 'disable_all')
       ctx.body = { data: fresh ? svc.statusPayload(fresh) : { ok: true } }
     },
   }

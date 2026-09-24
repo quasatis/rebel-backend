@@ -1,5 +1,17 @@
+function userLabel(user: {
+  firstName?: string | null
+  lastName?: string | null
+  email?: string | null
+  username?: string | null
+  id?: number
+}) {
+  const name = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim()
+  return name || user?.email || user?.username || (user?.id != null ? String(user.id) : '')
+}
+
 export default ({ strapi }: { strapi: any }) => {
   const service = () => strapi.service('api::backoffice-users.backoffice-users')
+  const audit = () => strapi.service('api::audit-log.audit-log')
 
   return {
     async find(ctx: any) {
@@ -72,6 +84,15 @@ export default ({ strapi }: { strapi: any }) => {
         roleId: role.id,
         blocked: false,
         invitePending: false,
+      })
+
+      await audit().writeLog({
+        action: 'create',
+        resourceType: 'user',
+        resourceId: created?.id,
+        resourceLabel: userLabel(created || { email, username }),
+        meta: { role: role.type },
+        ctx,
       })
 
       ctx.body = { data: created }
@@ -158,6 +179,18 @@ export default ({ strapi }: { strapi: any }) => {
       }
 
       const updated = await service().updateUser(id, patch)
+      await audit().writeLog({
+        action: 'user_update',
+        resourceType: 'user',
+        resourceId: id,
+        resourceLabel: userLabel(updated || existing),
+        meta: {
+          fields: Object.keys(patch),
+          blocked: patch.blocked,
+          role: nextRole?.type,
+        },
+        ctx,
+      })
       ctx.body = { data: updated }
     },
 
@@ -180,6 +213,13 @@ export default ({ strapi }: { strapi: any }) => {
       if (passwordError) return ctx.badRequest(passwordError)
 
       await service().updateUser(id, { password: String(data.password) })
+      await audit().writeLog({
+        action: 'password_reset',
+        resourceType: 'user',
+        resourceId: id,
+        resourceLabel: userLabel(existing),
+        ctx,
+      })
       ctx.body = { data: { ok: true } }
     },
 
@@ -250,6 +290,15 @@ export default ({ strapi }: { strapi: any }) => {
         )
       }
 
+      await audit().writeLog({
+        action: 'invite',
+        resourceType: 'user',
+        resourceId: created?.id,
+        resourceLabel: userLabel(created || { email }),
+        meta: { role: role.type },
+        ctx,
+      })
+
       ctx.body = { data: created }
     },
 
@@ -297,7 +346,15 @@ export default ({ strapi }: { strapi: any }) => {
         )
       }
 
-      ctx.body = { data: await service().findUser(id) }
+      const resent = await service().findUser(id)
+      await audit().writeLog({
+        action: 'invite_resend',
+        resourceType: 'user',
+        resourceId: id,
+        resourceLabel: userLabel(resent || existing),
+        ctx,
+      })
+      ctx.body = { data: resent }
     },
 
     async inviteStatus(ctx: any) {
@@ -363,6 +420,22 @@ export default ({ strapi }: { strapi: any }) => {
         inviteTokenHash: null,
         inviteExpiresAt: null,
         confirmed: true,
+      })
+
+      await audit().writeLog({
+        action: 'accept_invite',
+        resourceType: 'user',
+        resourceId: user.id,
+        resourceLabel: userLabel(user),
+        actor: {
+          id: user.id,
+          email: user.email,
+          role:
+            user.role && typeof user.role === 'object'
+              ? user.role.type || user.role.name
+              : null,
+        },
+        ctx,
       })
 
       ctx.body = { data: { ok: true, email: user.email } }
