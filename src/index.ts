@@ -1,5 +1,6 @@
 import dns from 'node:dns'
 import type { Core } from '@strapi/strapi'
+import { AUDIT_LIFECYCLE_UIDS } from './api/audit-log/services/audit-log'
 import { restorePurgedContent } from './utils/restore-purged-content'
 
 // Docker Desktop on Windows advertises NAT64 IPv6 for Cloudinary that is unreachable.
@@ -479,6 +480,26 @@ async function seedBackofficeUsers(strapi: Core.Strapi) {
     for (const action of adminUserActions) {
       await revokePermission(strapi, authRole.id, action)
     }
+  }
+
+  const auditLogReadActions = [
+    'api::audit-log.audit-log.find',
+    'api::audit-log.audit-log.findOne',
+  ]
+  const auditLogAllActions = [
+    ...auditLogReadActions,
+    'api::audit-log.audit-log.create',
+    'api::audit-log.audit-log.update',
+    'api::audit-log.audit-log.delete',
+  ]
+  for (const action of auditLogReadActions) {
+    await ensurePermission(strapi, adminRole.id, action)
+  }
+  for (const action of auditLogAllActions) {
+    await revokePermission(strapi, editorRole.id, action)
+    await revokePermission(strapi, viewerRole.id, action)
+    if (publicRole) await revokePermission(strapi, publicRole.id, action)
+    if (authRole) await revokePermission(strapi, authRole.id, action)
   }
 
   await ensureBackofficeUser(strapi, {
@@ -1901,6 +1922,20 @@ export default {
       },
       async afterUpdate() {
         await triggerNetlifyBuild(strapi, 'update')
+      },
+    })
+
+    const audit = strapi.service('api::audit-log.audit-log')
+    strapi.db.lifecycles.subscribe({
+      models: [...AUDIT_LIFECYCLE_UIDS],
+      async afterCreate(event) {
+        await audit.recordLifecycleEvent(event, 'create')
+      },
+      async afterUpdate(event) {
+        await audit.recordLifecycleEvent(event, 'update')
+      },
+      async afterDelete(event) {
+        await audit.recordLifecycleEvent(event, 'delete')
       },
     })
   },

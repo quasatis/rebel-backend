@@ -1,0 +1,73 @@
+{
+  "kind": "collectionType",
+  "collectionName": "audit_logs",
+  "info": {
+    "singularName": "audit-log",
+    "pluralName": "audit-logs",
+    "displayName": "Audit Log",
+    "description": "Append-only backoffice action history"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {
+    "content-manager": {
+      "visible": false
+    },
+    "content-type-builder": {
+      "visible": false
+    }
+  },
+  "attributes": {
+    "action": {
+      "type": "enumeration",
+      "enum": [
+        "create",
+        "update",
+        "delete",
+        "publish",
+        "unpublish",
+        "login",
+        "invite",
+        "invite_resend",
+        "accept_invite",
+        "user_update",
+        "password_reset",
+        "mfa_change",
+        "newsletter_send",
+        "newsletter_schedule",
+        "newsletter_cancel"
+      ],
+      "required": true
+    },
+    "actorUserId": {
+      "type": "string"
+    },
+    "actorEmail": {
+      "type": "string"
+    },
+    "actorRole": {
+      "type": "string"
+    },
+    "resourceType": {
+      "type": "string",
+      "required": true
+    },
+    "resourceId": {
+      "type": "string"
+    },
+    "resourceLabel": {
+      "type": "string"
+    },
+    "ip": {
+      "type": "string"
+    },
+    "meta": {
+      "type": "json"
+    },
+    "occurredAt": {
+      "type": "datetime",
+      "required": true
+    }
+  }
+}
