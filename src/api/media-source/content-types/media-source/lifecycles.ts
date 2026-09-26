@@ -9,6 +9,7 @@ export default {
     if (data?.provider && data?.externalId && !data.providerExternalKey) {
       data.providerExternalKey = `${data.provider}:${data.externalId}`
     }
+    if (data && !data.origin) data.origin = 'manual'
   },
   async beforeUpdate(event) {
     const { data } = event.params

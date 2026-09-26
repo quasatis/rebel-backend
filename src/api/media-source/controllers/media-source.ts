@@ -15,11 +15,34 @@ function ensureProviderExternalKey(body: { data?: Record<string, unknown> } | un
   }
 }
 
+function truthyQuery(value: unknown): boolean {
+  return value === true || value === 'true' || value === '1'
+}
+
 export default factories.createCoreController(
   'api::media-source.media-source',
   () => ({
+    async find(ctx) {
+      const query = (ctx.query || {}) as Record<string, unknown>
+      const excludeSyncedEpisodes = truthyQuery(query.excludeSyncedEpisodes)
+      delete query.excludeSyncedEpisodes
+
+      if (excludeSyncedEpisodes) {
+        const notEpisodes = { origin: { $ne: 'synced-episode' } }
+        const existing = query.filters
+        query.filters =
+          existing && typeof existing === 'object'
+            ? { $and: [existing, notEpisodes] }
+            : notEpisodes
+      }
+
+      return super.find(ctx)
+    },
+
     async create(ctx) {
-      ensureProviderExternalKey(ctx.request.body as { data?: Record<string, unknown> })
+      const body = ctx.request.body as { data?: Record<string, unknown> }
+      ensureProviderExternalKey(body)
+      if (body.data && !body.data.origin) body.data.origin = 'manual'
       return super.create(ctx)
     },
 

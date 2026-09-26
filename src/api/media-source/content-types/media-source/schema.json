@@ -40,6 +40,11 @@
     "rawMeta": {
       "type": "json"
     },
+    "origin": {
+      "type": "enumeration",
+      "enum": ["manual", "catalogue", "synced-episode"],
+      "default": "manual"
+    },
     "providerExternalKey": {
       "type": "string",
       "required": true,

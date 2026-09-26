@@ -6,6 +6,15 @@ export default {
   type: 'content-api',
   routes: [
     {
+      method: 'GET',
+      path: '/shows/:documentId/episodes',
+      handler: 'show.episodes',
+      config: {
+        policies: [],
+        middlewares: [],
+      },
+    },
+    {
       method: 'POST',
       path: '/shows/:documentId/sync',
       handler: 'show.sync',

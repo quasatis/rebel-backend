@@ -27,6 +27,36 @@ function slugify(input: string): string {
   return base || 'episode'
 }
 
+/** Draft copies of published shows — Document Service defaults to published-only. */
+async function findShowsLinkedToSource(
+  strapi: any,
+  source: { documentId: string },
+): Promise<Array<{ id: number; documentId: string }>> {
+  const rows = await strapi.documents('api::show.show').findMany({
+    filters: { youtubeSource: { documentId: source.documentId } },
+    status: 'draft',
+    limit: 50,
+  })
+  return (rows || []).filter((row: { documentId?: string }) => row?.documentId)
+}
+
+async function updateEpisodeVersions(
+  strapi: any,
+  documentId: string,
+  data: Record<string, unknown>,
+) {
+  const rows: Array<{ id: number }> = await strapi.db.query('api::show-episode.show-episode').findMany({
+    where: { documentId },
+    select: ['id'],
+  })
+  for (const row of rows || []) {
+    await strapi.db.query('api::show-episode.show-episode').update({
+      where: { id: row.id },
+      data,
+    })
+  }
+}
+
 async function uniqueEpisodeSlug(strapi: any, base: string, excludeDocumentId?: string) {
   let candidate = base
   let i = 2
@@ -78,11 +108,16 @@ function episodeReleaseMs(ep: {
  * Number episodes for a show by YouTube release date (oldest = EP 1, newest = highest).
  * Overwrites existing values so prior playlist-position / sync-stamp mistakes get repaired.
  */
-async function assignMissingEpisodeNumbers(strapi: any, showId: number): Promise<number> {
-  if (!showId) return 0
+async function assignMissingEpisodeNumbers(
+  strapi: any,
+  show: { id?: number; documentId?: string },
+): Promise<number> {
+  const showDocumentId = show?.documentId
+  if (!showDocumentId) return 0
 
-  const episodes = await strapi.db.query('api::show-episode.show-episode').findMany({
-    where: { show: showId },
+  const episodes = await strapi.documents('api::show-episode.show-episode').findMany({
+    filters: { show: { documentId: showDocumentId } },
+    status: 'draft',
     populate: ['mediaSource'],
     limit: 5000,
   })
@@ -135,10 +170,14 @@ async function assignMissingEpisodeNumbers(strapi: any, showId: number): Promise
     const next = i + 1
     const row = sortable[i]
     if (row.episodeNumber === next) continue
-    await strapi.db.query('api::show-episode.show-episode').update({
-      where: { id: row.id },
-      data: { episodeNumber: next },
-    })
+    if (row.documentId) {
+      await updateEpisodeVersions(strapi, row.documentId, { episodeNumber: next })
+    } else {
+      await strapi.db.query('api::show-episode.show-episode').update({
+        where: { id: row.id },
+        data: { episodeNumber: next },
+      })
+    }
     assigned += 1
   }
 
@@ -172,23 +211,14 @@ async function assignMissingEpisodeNumbers(strapi: any, showId: number): Promise
 }
 
 async function backfillMissingEpisodeNumbers(strapi: any): Promise<number> {
-  const episodes = await strapi.db.query('api::show-episode.show-episode').findMany({
-    populate: ['show'],
-    limit: 5000,
+  const shows = await strapi.documents('api::show.show').findMany({
+    status: 'draft',
+    limit: 200,
   })
-
-  const showIdSet = new Set<number>()
-  for (const ep of (episodes || []) as Array<{ show?: number | { id?: number } | null }>) {
-    if (typeof ep.show === 'number') showIdSet.add(ep.show)
-    else if (ep.show && typeof ep.show === 'object' && typeof ep.show.id === 'number') {
-      showIdSet.add(ep.show.id)
-    }
-  }
-  const showIds = Array.from(showIdSet)
-
   let totalAssigned = 0
-  for (const showId of showIds) {
-    totalAssigned += await assignMissingEpisodeNumbers(strapi, showId)
+  for (const show of shows || []) {
+    if (!show?.documentId) continue
+    totalAssigned += await assignMissingEpisodeNumbers(strapi, show)
   }
   return totalAssigned
 }
@@ -222,14 +252,13 @@ async function pruneSourceToSyncedItems(
     pruned += 1
   }
 
-  const shows = await strapi.documents('api::show.show').findMany({
-    filters: { youtubeSource: { id: source.id } },
-    limit: 50,
-  })
+  const shows = await findShowsLinkedToSource(strapi, source)
 
   for (const show of shows || []) {
-    const episodes = await strapi.db.query('api::show-episode.show-episode').findMany({
-      where: { show: show.id },
+    const episodes = await strapi.documents('api::show-episode.show-episode').findMany({
+      filters: { show: { documentId: show.documentId } },
+      status: 'draft',
+      populate: ['mediaSource'],
       limit: 5000,
     })
     for (const ep of episodes || []) {
@@ -242,15 +271,9 @@ async function pruneSourceToSyncedItems(
       if (typeof mediaId !== 'number') continue
       const shouldBeActive = keepMediaIds.has(mediaId)
       if (shouldBeActive && ep.isActive === false) {
-        await strapi.db.query('api::show-episode.show-episode').update({
-          where: { id: ep.id },
-          data: { isActive: true },
-        })
+        if (ep.documentId) await updateEpisodeVersions(strapi, ep.documentId, { isActive: true })
       } else if (!shouldBeActive && ep.isActive !== false) {
-        await strapi.db.query('api::show-episode.show-episode').update({
-          where: { id: ep.id },
-          data: { isActive: false },
-        })
+        if (ep.documentId) await updateEpisodeVersions(strapi, ep.documentId, { isActive: false })
       }
     }
   }
@@ -269,10 +292,7 @@ export default ({ strapi }) => ({
     mediaSourceId: number
     playlistPosition?: number | null
   }>) {
-    const shows = await strapi.documents('api::show.show').findMany({
-      filters: { youtubeSource: { id: source.id } },
-      limit: 50,
-    })
+    const shows = await findShowsLinkedToSource(strapi, source)
 
     if (!shows?.length) {
       return { episodesCreated: 0, episodesUpdated: 0, episodesNumbered: 0 }
@@ -284,11 +304,12 @@ export default ({ strapi }) => ({
 
     for (const show of shows) {
       for (const item of items) {
-        const existingEpisodes = await strapi.db.query('api::show-episode.show-episode').findMany({
-          where: {
-            show: show.id,
-            mediaSource: item.mediaSourceId,
+        const existingEpisodes = await strapi.documents('api::show-episode.show-episode').findMany({
+          filters: {
+            show: { documentId: show.documentId },
+            mediaSource: { id: item.mediaSourceId },
           },
+          status: 'draft',
           limit: 1,
         })
         const existing = existingEpisodes?.[0]
@@ -312,10 +333,9 @@ export default ({ strapi }) => ({
           if (item.durationSeconds != null) {
             patch.durationSeconds = item.durationSeconds
           }
-          await strapi.db.query('api::show-episode.show-episode').update({
-            where: { id: existing.id },
-            data: patch,
-          })
+          if (existing.documentId) {
+            await updateEpisodeVersions(strapi, existing.documentId, patch)
+          }
           if (item.publishedAt && existing.documentId) {
             const cmsMs = existing.publishedAt ? new Date(existing.publishedAt).getTime() : NaN
             const createdMs = existing.createdAt ? new Date(existing.createdAt).getTime() : NaN
@@ -361,7 +381,7 @@ export default ({ strapi }) => ({
         }
       }
 
-      episodesNumbered += await assignMissingEpisodeNumbers(strapi, show.id)
+      episodesNumbered += await assignMissingEpisodeNumbers(strapi, show)
     }
 
     return { episodesCreated, episodesUpdated, episodesNumbered }
@@ -682,6 +702,7 @@ export default ({ strapi }) => ({
     const show = await strapi.documents('api::show.show').findOne({
       documentId: showDocumentId,
       populate: ['youtubeSource'],
+      status: 'draft',
     })
     if (!show) {
       throw new Error('Show not found')
