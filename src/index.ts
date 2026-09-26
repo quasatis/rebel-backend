@@ -148,6 +148,7 @@ async function setRoleContentPermissions(
   await ensurePermission(strapi, roleId, 'plugin::users-permissions.user.me')
   await ensurePermission(strapi, roleId, 'api::mfa.mfa.me')
   await ensurePermission(strapi, roleId, 'api::mfa.mfa.status')
+  await ensurePermission(strapi, roleId, 'api::show.show.episodes')
 
   if (mode === 'full') {
     await ensurePermission(strapi, roleId, 'api::youtube-source.youtube-source.sync')
@@ -1878,6 +1879,17 @@ export default {
     } catch (error) {
       strapi.log.warn(
         `YouTube → media source sync skipped: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      )
+    }
+
+    try {
+      const { backfillMediaSourceOrigin } = await import('./utils/backfill-media-source-origin')
+      await backfillMediaSourceOrigin(strapi)
+    } catch (error) {
+      strapi.log.warn(
+        `Media source origin backfill skipped: ${
           error instanceof Error ? error.message : 'unknown'
         }`,
       )

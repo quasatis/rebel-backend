@@ -63,6 +63,7 @@ function buildPayload(source: YoutubeSourceLike) {
       externalUrl: `https://www.youtube.com/playlist?list=${externalId}`,
       title,
       providerExternalKey: `youtube:playlist:${externalId}`,
+      origin: 'catalogue' as const,
       rawMeta: {
         type: 'playlist',
         ...attribution,
@@ -79,6 +80,7 @@ function buildPayload(source: YoutubeSourceLike) {
       externalUrl: `https://www.youtube.com/watch?v=${externalId}`,
       title,
       providerExternalKey: `youtube:${externalId}`,
+      origin: 'catalogue' as const,
       rawMeta: {
         type: 'video',
         ...attribution,
@@ -115,6 +117,7 @@ export async function syncMediaSourceFromYoutubeSource(strapi: any, source: Yout
         ...(existingTitle ? {} : { title: payload.title }),
         externalId: payload.externalId,
         externalUrl: payload.externalUrl,
+        origin: payload.origin,
         rawMeta: nextMeta,
       },
     })
