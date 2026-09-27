@@ -25,6 +25,7 @@ export type NormalizedYoutubeVideo = {
     thumbnailUrl: string
     durationSeconds?: number
     providerExternalKey: string
+    origin: 'synced-episode'
     rawMeta?: Record<string, unknown>
   }
 }
@@ -66,8 +67,10 @@ export default () => ({
         thumbnailUrl: item.thumbnailUrl,
         durationSeconds: item.durationSeconds,
         providerExternalKey: `youtube:${item.id}`,
+        origin: 'synced-episode' as const,
         rawMeta: {
           type: 'video',
+          origin: 'synced-episode',
           channelTitle: item.channelTitle,
           channelId,
           channelUrl,
