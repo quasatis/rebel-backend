@@ -30,6 +30,7 @@ const CONTENT_UIDS = [
   'api::about-page.about-page',
   'api::rebel-of-the-week.rebel-of-the-week',
   'api::newsletter-config.newsletter-config',
+  'api::music-page-settings.music-page-settings',
   'api::newsletter-subscription.newsletter-subscription',
   'api::newsletter-campaign.newsletter-campaign',
   'api::contact-message.contact-message',
@@ -1020,6 +1021,21 @@ async function seedDemoContent(strapi: Core.Strapi) {
     strapi.log.info('Skipping newsletter-config seed — config already exists')
   }
 
+  const musicPageSettings = await strapi
+    .documents('api::music-page-settings.music-page-settings')
+    .findMany({ limit: 1 })
+  if (!musicPageSettings.length) {
+    await strapi.documents('api::music-page-settings.music-page-settings').create({
+      data: {
+        bannerTitle: 'Rebel Afrique OFFICIAL PLAYLISTS',
+        partnerLinkLabel: 'Listen on Spotify',
+        partnerEnabled: true,
+      },
+    })
+  } else {
+    strapi.log.info('Skipping music-page-settings seed — config already exists')
+  }
+
   const homepageSettings = await strapi
     .documents('api::homepage-settings.homepage-settings')
     .findMany({ limit: 1 })
@@ -1928,6 +1944,7 @@ export default {
         'api::about-page.about-page',
         'api::rebel-of-the-week.rebel-of-the-week',
         'api::newsletter-config.newsletter-config',
+        'api::music-page-settings.music-page-settings',
       ],
       async afterCreate() {
         await triggerNetlifyBuild(strapi, 'create')

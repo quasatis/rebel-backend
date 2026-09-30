@@ -1,0 +1,40 @@
+{
+  "kind": "singleType",
+  "collectionName": "music_page_settings",
+  "info": {
+    "singularName": "music-page-settings",
+    "pluralName": "music-page-settings-entries",
+    "displayName": "Music Page Settings"
+  },
+  "options": { "draftAndPublish": false },
+  "attributes": {
+    "bannerTitle": {
+      "type": "string",
+      "default": "Rebel Afrique OFFICIAL PLAYLISTS",
+      "maxLength": 100
+    },
+    "backgroundImage": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"]
+    },
+    "partnerLogo": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"]
+    },
+    "partnerLinkUrl": {
+      "type": "string",
+      "maxLength": 500
+    },
+    "partnerLinkLabel": {
+      "type": "string",
+      "maxLength": 80,
+      "default": "Listen on Spotify"
+    },
+    "partnerEnabled": {
+      "type": "boolean",
+      "default": true
+    }
+  }
+}
