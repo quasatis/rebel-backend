@@ -48,6 +48,7 @@ export const AUDIT_LIFECYCLE_UIDS = [
   'api::about-page.about-page',
   'api::rebel-of-the-week.rebel-of-the-week',
   'api::newsletter-config.newsletter-config',
+  'api::music-page-settings.music-page-settings',
   'api::newsletter-campaign.newsletter-campaign',
 ] as const
 
