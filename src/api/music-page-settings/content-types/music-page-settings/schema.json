@@ -32,6 +32,10 @@
       "maxLength": 80,
       "default": "Listen on Spotify"
     },
+    "bannerLinkEnabled": {
+      "type": "boolean",
+      "default": true
+    },
     "partnerEnabled": {
       "type": "boolean",
       "default": true
