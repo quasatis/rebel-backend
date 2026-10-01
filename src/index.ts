@@ -1790,6 +1790,29 @@ export default {
     }
 
     try {
+      const existingMusicPage = await strapi
+        .documents('api::music-page-settings.music-page-settings')
+        .findMany({ limit: 1 })
+      if (!existingMusicPage.length) {
+        await strapi.documents('api::music-page-settings.music-page-settings').create({
+          data: {
+            bannerTitle: 'Rebel Afrique OFFICIAL PLAYLISTS',
+            partnerLinkLabel: 'Listen on Spotify',
+            bannerLinkEnabled: true,
+            partnerEnabled: true,
+          },
+        })
+        strapi.log.info('Created default music-page-settings.')
+      }
+    } catch (error) {
+      strapi.log.warn(
+        `Music page settings ensure skipped: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      )
+    }
+
+    try {
       await seedBackofficeUsers(strapi)
       await repairUsersMissingRole(strapi)
     } catch (error) {
