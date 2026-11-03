@@ -10,6 +10,8 @@ import {
   normalizeYoutubeVideoId,
 } from '../../../utils/youtube-ids'
 
+export type YoutubeLiveBroadcastContent = 'none' | 'upcoming' | 'live'
+
 export type YoutubeListItem = {
   id: string
   title: string
@@ -20,6 +22,58 @@ export type YoutubeListItem = {
   durationSeconds?: number
   /** 0-based index in the YouTube playlist (snippet.position). */
   playlistPosition?: number
+  /** From snippet.liveBroadcastContent — premiers and lives. */
+  liveBroadcastContent?: YoutubeLiveBroadcastContent
+  scheduledStartTime?: string
+  actualStartTime?: string
+  actualEndTime?: string
+}
+
+type YoutubeVideoApiRow = {
+  id?: string
+  snippet?: {
+    title?: string
+    description?: string
+    publishedAt?: string
+    channelTitle?: string
+    liveBroadcastContent?: string
+    thumbnails?: { high?: { url?: string }; medium?: { url?: string } }
+  }
+  contentDetails?: { duration?: string }
+  liveStreamingDetails?: {
+    scheduledStartTime?: string
+    actualStartTime?: string
+    actualEndTime?: string
+  }
+}
+
+function normalizeLiveBroadcastContent(raw: unknown): YoutubeLiveBroadcastContent {
+  const value = String(raw || '')
+    .trim()
+    .toLowerCase()
+  if (value === 'live' || value === 'upcoming') return value
+  return 'none'
+}
+
+function applyLiveDetails(target: YoutubeListItem, row: YoutubeVideoApiRow) {
+  target.liveBroadcastContent = normalizeLiveBroadcastContent(row.snippet?.liveBroadcastContent)
+  const details = row.liveStreamingDetails
+  if (details?.scheduledStartTime) target.scheduledStartTime = details.scheduledStartTime
+  if (details?.actualStartTime) target.actualStartTime = details.actualStartTime
+  if (details?.actualEndTime) target.actualEndTime = details.actualEndTime
+}
+
+/** Live/premiere fields suitable for mediaSource.rawMeta. */
+export function liveRawMetaFromItem(item: Pick<
+  YoutubeListItem,
+  'liveBroadcastContent' | 'scheduledStartTime' | 'actualStartTime' | 'actualEndTime'
+>): Record<string, unknown> {
+  const liveBroadcastContent = normalizeLiveBroadcastContent(item.liveBroadcastContent)
+  const meta: Record<string, unknown> = { liveBroadcastContent }
+  if (item.scheduledStartTime) meta.scheduledStartTime = item.scheduledStartTime
+  if (item.actualStartTime) meta.actualStartTime = item.actualStartTime
+  if (item.actualEndTime) meta.actualEndTime = item.actualEndTime
+  return meta
 }
 
 /**
@@ -84,7 +138,7 @@ function parseDuration(iso?: string): number | undefined {
   return h * 3600 + m * 60 + s
 }
 
-/** Batch video IDs (max 50 per YouTube videos.list call) and attach duration, title, and true publish date. */
+/** Batch video IDs (max 50 per YouTube videos.list call) and attach duration, title, publish date, and live/premiere details. */
 async function enrichVideoDetails(items: YoutubeListItem[]): Promise<YoutubeListItem[]> {
   if (!items.length) return items
   const byId = new Map(items.map((item) => [item.id, { ...item }]))
@@ -93,18 +147,9 @@ async function enrichVideoDetails(items: YoutubeListItem[]): Promise<YoutubeList
   for (let i = 0; i < ids.length; i += 50) {
     const chunk = ids.slice(i, i + 50)
     const data = await youtubeGet<{
-      items?: Array<{
-        id?: string
-        snippet?: {
-          title?: string
-          description?: string
-          publishedAt?: string
-          channelTitle?: string
-        }
-        contentDetails?: { duration?: string }
-      }>
+      items?: YoutubeVideoApiRow[]
     }>('videos', {
-      part: 'snippet,contentDetails',
+      part: 'snippet,contentDetails,liveStreamingDetails',
       id: chunk.join(','),
     })
     for (const row of data.items || []) {
@@ -125,6 +170,7 @@ async function enrichVideoDetails(items: YoutubeListItem[]): Promise<YoutubeList
       if (row.snippet?.channelTitle) {
         existing.channelTitle = row.snippet.channelTitle
       }
+      applyLiveDetails(existing, row)
     }
     // Small pause between batches to reduce quota spikes
     if (i + 50 < ids.length) await sleep(150)
@@ -361,19 +407,9 @@ export default () => ({
       throw new Error('Video ID is empty. Paste a video ID or watch URL.')
     }
     const data = await youtubeGet<{
-      items?: Array<{
-        id?: string
-        snippet?: {
-          title?: string
-          description?: string
-          publishedAt?: string
-          channelTitle?: string
-          thumbnails?: { high?: { url?: string }; medium?: { url?: string } }
-        }
-        contentDetails?: { duration?: string }
-      }>
+      items?: YoutubeVideoApiRow[]
     }>('videos', {
-      part: 'snippet,contentDetails',
+      part: 'snippet,contentDetails,liveStreamingDetails',
       id,
     }).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : String(error)
@@ -388,7 +424,7 @@ export default () => ({
     if (!item?.id) return null
     const title = item.snippet?.title || 'Untitled'
     if (isExcludedYoutubeVideoTitle(title)) return null
-    return {
+    const result: YoutubeListItem = {
       id: item.id,
       title,
       description: item.snippet?.description || '',
@@ -401,5 +437,7 @@ export default () => ({
       durationSeconds: parseDuration(item.contentDetails?.duration),
       playlistPosition: 0,
     }
+    applyLiveDetails(result, item)
+    return result
   },
 })

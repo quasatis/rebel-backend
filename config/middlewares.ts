@@ -49,6 +49,7 @@ export default ({ env }) => {
       },
     },
     'global::upload-folder',
+    'global::no-store-get',
     'strapi::session',
     'strapi::favicon',
     'strapi::public',

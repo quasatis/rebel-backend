@@ -1,4 +1,4 @@
-import type { YoutubeListItem } from './youtube'
+import { liveRawMetaFromItem, type YoutubeListItem } from './youtube'
 
 export type YoutubeAttribution = {
   channelId?: string | null
@@ -78,6 +78,7 @@ export default () => ({
           playlistPosition: item.playlistPosition ?? null,
           youtubeSourceDocumentId: attribution.youtubeSourceDocumentId || null,
           youtubeSourceId: attribution.youtubeSourceId ?? null,
+          ...liveRawMetaFromItem(item),
         },
       },
     }

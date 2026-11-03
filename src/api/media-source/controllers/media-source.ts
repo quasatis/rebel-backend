@@ -1,4 +1,6 @@
 ﻿import { factories } from '@strapi/strapi'
+import { enrichYoutubeMediaSourceData, refreshMediaSourceLiveStatus } from '../../../utils/enrich-youtube-media-source'
+import { getCachedLiveStatus, setCachedLiveStatus } from '../../../utils/live-status-cache'
 
 /**
  * Strapi 5 Document Service validates required fields before DB lifecycles run,
@@ -21,7 +23,7 @@ function truthyQuery(value: unknown): boolean {
 
 export default factories.createCoreController(
   'api::media-source.media-source',
-  () => ({
+  ({ strapi }) => ({
     async find(ctx) {
       const query = (ctx.query || {}) as Record<string, unknown>
       const excludeSyncedEpisodes = truthyQuery(query.excludeSyncedEpisodes)
@@ -43,12 +45,80 @@ export default factories.createCoreController(
       const body = ctx.request.body as { data?: Record<string, unknown> }
       ensureProviderExternalKey(body)
       if (body.data && !body.data.origin) body.data.origin = 'manual'
+      if (body.data) {
+        body.data = await enrichYoutubeMediaSourceData(strapi, body.data)
+        ensureProviderExternalKey(body)
+      }
       return super.create(ctx)
     },
 
     async update(ctx) {
-      ensureProviderExternalKey(ctx.request.body as { data?: Record<string, unknown> })
+      const body = ctx.request.body as { data?: Record<string, unknown> }
+      ensureProviderExternalKey(body)
+      if (body?.data) {
+        body.data = await enrichYoutubeMediaSourceData(strapi, body.data)
+        ensureProviderExternalKey(body)
+      }
       return super.update(ctx)
+    },
+
+    /**
+     * Public live/premiere status for a media-source.
+     * Refreshes from YouTube with a short in-memory cache (~30s per video id).
+     */
+    async liveStatus(ctx) {
+      const documentId = String(ctx.params.documentId || ctx.params.id || '').trim()
+      if (!documentId) {
+        return ctx.badRequest('documentId is required')
+      }
+
+      const row = await strapi.db.query('api::media-source.media-source').findOne({
+        where: { documentId },
+        select: ['id', 'documentId', 'provider', 'externalId', 'title', 'thumbnailUrl', 'rawMeta'],
+      })
+      if (!row) {
+        return ctx.notFound('Media source not found')
+      }
+
+      const externalId = String(row.externalId || '').trim()
+      const cached = getCachedLiveStatus(externalId)
+      if (cached) {
+        ctx.body = { data: cached }
+        return
+      }
+
+      try {
+        const payload = await refreshMediaSourceLiveStatus(strapi, documentId)
+        if (!payload) {
+          return ctx.notFound('Media source not found')
+        }
+        setCachedLiveStatus(payload.externalId || externalId, payload)
+        ctx.body = { data: payload }
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Failed to refresh live status'
+        // Fall back to persisted rawMeta so FO countdown still works offline from YouTube.
+        const meta =
+          row.rawMeta && typeof row.rawMeta === 'object' && !Array.isArray(row.rawMeta)
+            ? (row.rawMeta as Record<string, unknown>)
+            : {}
+        const broadcast = String(meta.liveBroadcastContent || '').toLowerCase()
+        const liveBroadcastContent: 'live' | 'upcoming' | 'none' =
+          broadcast === 'live' || broadcast === 'upcoming' ? broadcast : 'none'
+        const fallback = {
+          liveBroadcastContent,
+          scheduledStartTime: (meta.scheduledStartTime as string) || null,
+          actualStartTime: (meta.actualStartTime as string) || null,
+          actualEndTime: (meta.actualEndTime as string) || null,
+          externalId,
+          title: row.title || null,
+          thumbnailUrl: row.thumbnailUrl || null,
+          refreshedAt: new Date().toISOString(),
+          warning: message,
+        }
+        setCachedLiveStatus(externalId, fallback)
+        ctx.body = { data: fallback }
+        strapi.log.warn(`media-source.liveStatus: ${message}`)
+      }
     },
   }),
 )
