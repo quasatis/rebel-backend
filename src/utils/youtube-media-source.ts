@@ -91,9 +91,38 @@ function buildPayload(source: YoutubeSourceLike) {
   return null
 }
 
+async function mergeLiveMetaFromYoutube(
+  strapi: any,
+  payload: NonNullable<ReturnType<typeof buildPayload>>,
+) {
+  if (payload.rawMeta?.type !== 'video') return payload
+  try {
+    const { liveRawMetaFromItem } = await import('../api/youtube-source/services/youtube')
+    const youtube = strapi.service('api::youtube-source.youtube')
+    const item = await youtube.fetchVideo(payload.externalId)
+    if (!item) return payload
+    const rawMeta = payload.rawMeta as Record<string, unknown>
+    return {
+      ...payload,
+      title: String(payload.title || '').trim() || item.title || payload.title,
+      thumbnailUrl: item.thumbnailUrl || undefined,
+      durationSeconds: item.durationSeconds as number | undefined,
+      rawMeta: {
+        ...rawMeta,
+        ...liveRawMetaFromItem(item),
+        publishedAt: item.publishedAt || rawMeta.publishedAt,
+        channelTitle: item.channelTitle || rawMeta.channelTitle || null,
+      },
+    }
+  } catch {
+    return payload
+  }
+}
+
 export async function syncMediaSourceFromYoutubeSource(strapi: any, source: YoutubeSourceLike) {
-  const payload = buildPayload(source)
-  if (!payload) return null
+  const built = buildPayload(source)
+  if (!built) return null
+  const payload = await mergeLiveMetaFromYoutube(strapi, built)
 
   const existing = await strapi.db.query(MEDIA_UID).findOne({
     where: { providerExternalKey: payload.providerExternalKey },
@@ -109,6 +138,10 @@ export async function syncMediaSourceFromYoutubeSource(strapi: any, source: Yout
     if (!nextMeta.channelTitle && prevMeta.channelTitle) {
       nextMeta.channelTitle = prevMeta.channelTitle
     }
+    // Preserve prior live timestamps if this fetch omitted them.
+    for (const key of ['scheduledStartTime', 'actualStartTime', 'actualEndTime'] as const) {
+      if (!nextMeta[key] && prevMeta[key]) nextMeta[key] = prevMeta[key]
+    }
     const existingTitle = String(existing.title || '').trim()
     return strapi.db.query(MEDIA_UID).update({
       where: { id: existing.id },
@@ -118,6 +151,10 @@ export async function syncMediaSourceFromYoutubeSource(strapi: any, source: Yout
         externalId: payload.externalId,
         externalUrl: payload.externalUrl,
         origin: payload.origin,
+        ...(payload.thumbnailUrl ? { thumbnailUrl: payload.thumbnailUrl } : {}),
+        ...(typeof payload.durationSeconds === 'number'
+          ? { durationSeconds: payload.durationSeconds }
+          : {}),
         rawMeta: nextMeta,
       },
     })
