@@ -101,11 +101,9 @@ export default factories.createCoreController(
           row.rawMeta && typeof row.rawMeta === 'object' && !Array.isArray(row.rawMeta)
             ? (row.rawMeta as Record<string, unknown>)
             : {}
-        const liveBroadcastContent = ['live', 'upcoming'].includes(
-          String(meta.liveBroadcastContent || '').toLowerCase(),
-        )
-          ? (String(meta.liveBroadcastContent).toLowerCase() as 'live' | 'upcoming')
-          : 'none'
+        const broadcast = String(meta.liveBroadcastContent || '').toLowerCase()
+        const liveBroadcastContent: 'live' | 'upcoming' | 'none' =
+          broadcast === 'live' || broadcast === 'upcoming' ? broadcast : 'none'
         const fallback = {
           liveBroadcastContent,
           scheduledStartTime: (meta.scheduledStartTime as string) || null,

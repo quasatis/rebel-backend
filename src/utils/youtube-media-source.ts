@@ -151,8 +151,10 @@ export async function syncMediaSourceFromYoutubeSource(strapi: any, source: Yout
         externalId: payload.externalId,
         externalUrl: payload.externalUrl,
         origin: payload.origin,
-        ...(payload.thumbnailUrl ? { thumbnailUrl: payload.thumbnailUrl } : {}),
-        ...(typeof payload.durationSeconds === 'number'
+        ...('thumbnailUrl' in payload && payload.thumbnailUrl
+          ? { thumbnailUrl: payload.thumbnailUrl }
+          : {}),
+        ...('durationSeconds' in payload && typeof payload.durationSeconds === 'number'
           ? { durationSeconds: payload.durationSeconds }
           : {}),
         rawMeta: nextMeta,

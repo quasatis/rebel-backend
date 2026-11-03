@@ -26,6 +26,7 @@ export type YoutubeLiveStatusPayload = {
   title: string | null
   thumbnailUrl: string | null
   refreshedAt: string
+  warning?: string
 }
 
 /** Merge YouTube video details into a create/update body.data object. */
