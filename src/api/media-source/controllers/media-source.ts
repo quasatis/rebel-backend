@@ -1,6 +1,8 @@
 ﻿import { factories } from '@strapi/strapi'
 import { enrichYoutubeMediaSourceData, refreshMediaSourceLiveStatus } from '../../../utils/enrich-youtube-media-source'
+import { enrichVimeoMediaSourceData } from '../../../utils/enrich-vimeo-media-source'
 import { getCachedLiveStatus, setCachedLiveStatus } from '../../../utils/live-status-cache'
+import { vimeoProviderExternalKey } from '../../../utils/vimeo-ids'
 
 /**
  * Strapi 5 Document Service validates required fields before DB lifecycles run,
@@ -9,9 +11,20 @@ import { getCachedLiveStatus, setCachedLiveStatus } from '../../../utils/live-st
 function ensureProviderExternalKey(body: { data?: Record<string, unknown> } | undefined) {
   const data = body?.data
   if (!data) return
-  const provider = data.provider != null ? String(data.provider).trim() : ''
+  const provider = data.provider != null ? String(data.provider).trim().toLowerCase() : ''
   const externalId = data.externalId != null ? String(data.externalId).trim() : ''
   if (!provider || !externalId) return
+  if (provider === 'vimeo') {
+    const type = String(
+      (data.rawMeta && typeof data.rawMeta === 'object'
+        ? (data.rawMeta as { type?: unknown }).type
+        : '') || '',
+    )
+      .trim()
+      .toLowerCase()
+    data.providerExternalKey = vimeoProviderExternalKey(externalId, type)
+    return
+  }
   if (!data.providerExternalKey) {
     data.providerExternalKey = `${provider}:${externalId}`
   }
@@ -47,6 +60,7 @@ export default factories.createCoreController(
       if (body.data && !body.data.origin) body.data.origin = 'manual'
       if (body.data) {
         body.data = await enrichYoutubeMediaSourceData(strapi, body.data)
+        body.data = await enrichVimeoMediaSourceData(strapi, body.data)
         ensureProviderExternalKey(body)
       }
       return super.create(ctx)
@@ -57,6 +71,7 @@ export default factories.createCoreController(
       ensureProviderExternalKey(body)
       if (body?.data) {
         body.data = await enrichYoutubeMediaSourceData(strapi, body.data)
+        body.data = await enrichVimeoMediaSourceData(strapi, body.data)
         ensureProviderExternalKey(body)
       }
       return super.update(ctx)
