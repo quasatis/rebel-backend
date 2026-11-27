@@ -372,6 +372,31 @@ export function publicYoutubeSource(source: Record<string, unknown> | null | und
   return out.documentId || out.id ? out : null
 }
 
+function unwrapRelation(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object') return null
+  const raw = value as Record<string, unknown>
+  const nested = raw.data
+  const obj =
+    nested && typeof nested === 'object' && !Array.isArray(nested)
+      ? (nested as Record<string, unknown>)
+      : raw
+  return obj
+}
+
+/** Media source can drive an embed only with provider + externalId (not a bare id). */
+function isUsableMediaSource(value: unknown): boolean {
+  const obj = unwrapRelation(value)
+  if (!obj) return false
+  return Boolean(String(obj.provider || '').trim() && String(obj.externalId || '').trim())
+}
+
+/** Channel/username YouTube sources cannot be embedded on a volume page. */
+function isUsableYoutubeSource(value: unknown): boolean {
+  const obj = unwrapRelation(value)
+  if (!obj) return false
+  return Boolean(String(obj.playlistId || '').trim() || String(obj.videoId || '').trim())
+}
+
 function embedScore(row: {
   youtubeSource?: unknown
   mediaSource?: unknown
@@ -379,10 +404,10 @@ function embedScore(row: {
   vimeoSource?: unknown
 }) {
   return (
-    (row.youtubeSource ? 8 : 0) +
-    (row.mediaSource ? 4 : 0) +
-    (row.spotifySource ? 2 : 0) +
-    (row.vimeoSource ? 1 : 0)
+    (isUsableYoutubeSource(row.youtubeSource) ? 8 : 0) +
+    (isUsableMediaSource(row.mediaSource) ? 4 : 0) +
+    (isUsableMediaSource(row.spotifySource) ? 2 : 0) +
+    (isUsableMediaSource(row.vimeoSource) ? 1 : 0)
   )
 }
 
@@ -434,16 +459,17 @@ export async function attachPublicPlaylistEmbeds(strapi: any, payload: unknown) 
     const row = embeds.get(documentId)
     if (!row) continue
 
-    if (!item.youtubeSource && row.youtubeSource) {
-      item.youtubeSource = publicYoutubeSource(row.youtubeSource)
+    if (!isUsableYoutubeSource(item.youtubeSource) && row.youtubeSource) {
+      const next = publicYoutubeSource(row.youtubeSource)
+      if (next) item.youtubeSource = next
     }
-    if (!item.mediaSource && row.mediaSource) {
+    if (!isUsableMediaSource(item.mediaSource) && isUsableMediaSource(row.mediaSource)) {
       item.mediaSource = row.mediaSource
     }
-    if (!item.spotifySource && row.spotifySource) {
+    if (!isUsableMediaSource(item.spotifySource) && isUsableMediaSource(row.spotifySource)) {
       item.spotifySource = row.spotifySource
     }
-    if (!item.vimeoSource && row.vimeoSource) {
+    if (!isUsableMediaSource(item.vimeoSource) && isUsableMediaSource(row.vimeoSource)) {
       item.vimeoSource = row.vimeoSource
     }
   }
