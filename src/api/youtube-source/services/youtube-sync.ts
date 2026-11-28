@@ -70,11 +70,9 @@ async function enrichMissingVideoDetails(
     select: ['youtubeVideoId', 'durationSeconds'],
     limit: ids.length,
   })
-  const known = new Map(
-    (existing || []).map((row: { youtubeVideoId?: string; durationSeconds?: number | null }) => [
-      String(row.youtubeVideoId || ''),
-      row,
-    ]),
+  type KnownRow = { youtubeVideoId?: string; durationSeconds?: number | null }
+  const known = new Map<string, KnownRow>(
+    (existing || []).map((row: KnownRow) => [String(row.youtubeVideoId || ''), row] as const),
   )
   const need = items.filter((item) => {
     const row = known.get(item.id)
@@ -124,7 +122,7 @@ async function ownerIdsForRelation(
     .whereIn(join.inverseJoinColumn.name, targetIds)
     .select(join.joinColumn.name)
   return [
-    ...new Set(
+    ...new Set<number>(
       (rows || [])
         .map((row: Record<string, unknown>) => Number(row[join.joinColumn.name]))
         .filter((id: number) => Number.isInteger(id) && id > 0),
