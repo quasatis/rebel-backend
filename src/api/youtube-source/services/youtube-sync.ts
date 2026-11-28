@@ -102,17 +102,275 @@ function slugify(input: string): string {
   return base || 'episode'
 }
 
-/** Draft copies of published shows — Document Service defaults to published-only. */
+function clipText(value: unknown, max: number): string {
+  const text = String(value ?? '')
+  if (text.length <= max) return text
+  return text.slice(0, max)
+}
+
+/** Owner-row ids whose relation points at one of `targetIds` (Strapi 5 link table). */
+async function ownerIdsForRelation(
+  strapi: any,
+  uid: string,
+  attribute: string,
+  targetIds: number[],
+): Promise<number[]> {
+  if (!targetIds.length) return []
+  const attr = strapi.db.metadata.get(uid)?.attributes?.[attribute]
+  const join = attr?.joinTable
+  if (!join?.name || !join.joinColumn?.name || !join.inverseJoinColumn?.name) return []
+  const rows = await strapi.db
+    .connection(join.name)
+    .whereIn(join.inverseJoinColumn.name, targetIds)
+    .select(join.joinColumn.name)
+  return [
+    ...new Set(
+      (rows || [])
+        .map((row: Record<string, unknown>) => Number(row[join.joinColumn.name]))
+        .filter((id: number) => Number.isInteger(id) && id > 0),
+    ),
+  ]
+}
+
+async function sourceRowIds(
+  strapi: any,
+  source: { id?: number; documentId: string },
+): Promise<number[]> {
+  const sourceRows: Array<{ id?: number }> = await strapi.db
+    .query('api::youtube-source.youtube-source')
+    .findMany({
+      where: { documentId: source.documentId },
+      select: ['id'],
+      limit: 10,
+    })
+  const ids = (sourceRows || [])
+    .map((row) => row.id)
+    .filter((id): id is number => typeof id === 'number')
+  if (typeof source.id === 'number' && !ids.includes(source.id)) ids.push(source.id)
+  return ids
+}
+
+/**
+ * Shows that point at this source. The document-service relation filter misses
+ * newly linked shows, so the link table is the source of truth.
+ */
 async function findShowsLinkedToSource(
   strapi: any,
-  source: { documentId: string },
+  source: { id?: number; documentId: string },
 ): Promise<Array<{ id: number; documentId: string }>> {
-  const rows = await strapi.documents('api::show.show').findMany({
-    filters: { youtubeSource: { documentId: source.documentId } },
-    status: 'draft',
-    limit: 50,
+  const seen = new Map<string, { id: number; documentId: string }>()
+  const add = (row: { id?: number; documentId?: string } | null | undefined) => {
+    if (!row?.documentId || seen.has(row.documentId)) return
+    seen.set(row.documentId, { id: Number(row.id) || 0, documentId: row.documentId })
+  }
+
+  try {
+    const ids = await sourceRowIds(strapi, source)
+    const showIds = await ownerIdsForRelation(strapi, 'api::show.show', 'youtubeSource', ids)
+    if (showIds.length) {
+      const shows: Array<{ id?: number; documentId?: string }> = await strapi.db
+        .query('api::show.show')
+        .findMany({
+          where: { id: { $in: showIds } },
+          select: ['id', 'documentId'],
+          limit: 100,
+        })
+      for (const row of shows || []) add(row)
+    }
+  } catch (error) {
+    strapi.log.warn(
+      `Show link lookup for YouTube source ${source.documentId} failed: ${
+        error instanceof Error ? error.message : 'unknown'
+      }`,
+    )
+  }
+
+  if (!seen.size) {
+    for (const status of ['draft', 'published'] as const) {
+      try {
+        const rows = await strapi.documents('api::show.show').findMany({
+          filters: { youtubeSource: { documentId: { $eq: source.documentId } } },
+          status,
+          limit: 100,
+        })
+        for (const row of rows || []) add(row)
+      } catch (error) {
+        strapi.log.warn(
+          `Show lookup by YouTube source ${source.documentId} (${status}) failed: ${
+            error instanceof Error ? error.message : 'unknown'
+          }`,
+        )
+      }
+    }
+  }
+
+  return [...seen.values()]
+}
+
+async function loadSyncedVideosForSource(
+  strapi: any,
+  source: { id: number; documentId: string },
+) {
+  const sourceIds = await sourceRowIds(strapi, source)
+  let videos: Array<{
+    title?: string
+    description?: string
+    publishedAt?: string | null
+    durationSeconds?: number | null
+    youtubeVideoId?: string
+    mediaSource?: { id?: number; externalId?: string } | number | null
+  }> = []
+  const videoIds = await ownerIdsForRelation(
+    strapi,
+    'api::synced-video.synced-video',
+    'youtubeSource',
+    sourceIds,
+  )
+  if (videoIds.length) {
+    videos = await strapi.db.query('api::synced-video.synced-video').findMany({
+      where: { id: { $in: videoIds } },
+      populate: { mediaSource: true },
+      limit: 5000,
+    })
+  }
+  if (!videos.length) {
+    videos = await strapi.db.query('api::synced-video.synced-video').findMany({
+      where: { youtubeSource: source.id },
+      populate: { mediaSource: true },
+      limit: 5000,
+    })
+  }
+  return videos
+}
+
+async function linkedMediaKeysForShow(strapi: any, showDocumentId: string) {
+  const showRows: Array<{ id?: number }> = await strapi.db.query('api::show.show').findMany({
+    where: { documentId: showDocumentId },
+    select: ['id'],
+    limit: 10,
   })
-  return (rows || []).filter((row: { documentId?: string }) => row?.documentId)
+  const showIds = (showRows || [])
+    .map((row) => row.id)
+    .filter((id): id is number => typeof id === 'number')
+  const episodeIds = await ownerIdsForRelation(
+    strapi,
+    'api::show-episode.show-episode',
+    'show',
+    showIds,
+  )
+  const linked = new Set<string>()
+  if (!episodeIds.length) return linked
+  const existing = await strapi.db.query('api::show-episode.show-episode').findMany({
+    where: { id: { $in: episodeIds } },
+    populate: { mediaSource: true },
+    limit: 5000,
+  })
+  for (const episode of existing || []) {
+    const media = episode?.mediaSource
+    if (typeof media === 'number') linked.add(`id:${media}`)
+    if (media && typeof media === 'object') {
+      if (media.id != null) linked.add(`id:${media.id}`)
+      if (media.externalId) linked.add(`ext:${media.externalId}`)
+    }
+  }
+  return linked
+}
+
+async function nextEpisodeSlug(strapi: any, title: string, used: Set<string>) {
+  const base = slugify(title)
+  let candidate = base
+  let i = 2
+  while (used.has(candidate)) {
+    candidate = `${base}-${i}`
+    i += 1
+  }
+  const unique = await uniqueEpisodeSlug(strapi, candidate)
+  used.add(unique)
+  return unique
+}
+
+/**
+ * Videos can be imported before a show is linked, and later RSS syncs skip
+ * videos that already exist. Create the missing episodes from the full catalogue.
+ */
+async function ensureEpisodesForSyncedVideos(
+  strapi: any,
+  source: { id: number; documentId: string },
+) {
+  const shows = await findShowsLinkedToSource(strapi, source)
+  if (!shows.length) {
+    strapi.log.warn(
+      `No show is linked to YouTube source ${source.documentId}; imported videos were not turned into episodes`,
+    )
+    return { episodesCreated: 0, episodesUpdated: 0, episodesNumbered: 0 }
+  }
+
+  const videos = await loadSyncedVideosForSource(strapi, source)
+  if (!videos.length) {
+    return { episodesCreated: 0, episodesUpdated: 0, episodesNumbered: 0 }
+  }
+
+  const usedSlugs = new Set<string>()
+  let episodesCreated = 0
+  let episodesNumbered = 0
+
+  for (const show of shows) {
+    const linked = await linkedMediaKeysForShow(strapi, show.documentId)
+
+    for (const video of videos) {
+      const media = video.mediaSource
+      const mediaId = typeof media === 'number' ? media : media?.id
+      const externalId = String(
+        (typeof media === 'object' && media?.externalId) || video.youtubeVideoId || '',
+      ).trim()
+      if (!mediaId || !externalId) continue
+      if (linked.has(`id:${mediaId}`) || linked.has(`ext:${externalId}`)) continue
+
+      const title = clipText(video.title, 100) || 'Episode'
+      try {
+        const slug = await nextEpisodeSlug(strapi, title, usedSlugs)
+        const created = await strapi.documents('api::show-episode.show-episode').create({
+          data: {
+            title,
+            description: clipText(video.description, 2000),
+            durationSeconds: video.durationSeconds ?? null,
+            isActive: true,
+            slug,
+            show: show.documentId,
+            mediaSource: mediaId,
+          },
+          status: 'published',
+        })
+        if (video.publishedAt && created?.documentId) {
+          await setDocumentPublishedAt(
+            strapi,
+            'api::show-episode.show-episode',
+            created.documentId,
+            video.publishedAt,
+          )
+        }
+        linked.add(`id:${mediaId}`)
+        linked.add(`ext:${externalId}`)
+        episodesCreated += 1
+      } catch (error) {
+        strapi.log.error(
+          `Could not create episode for ${externalId} on show ${show.documentId}: ${
+            error instanceof Error ? error.message : 'unknown'
+          }`,
+        )
+      }
+    }
+
+    episodesNumbered += await assignMissingEpisodeNumbers(strapi, show)
+  }
+
+  if (episodesCreated) {
+    strapi.log.info(
+      `Created ${episodesCreated} missing episodes for YouTube source ${source.documentId}`,
+    )
+  }
+
+  return { episodesCreated, episodesUpdated: 0, episodesNumbered }
 }
 
 async function updateEpisodeVersions(
@@ -683,6 +941,15 @@ export default ({ strapi }) => ({
     } catch (error) {
       const quota = isYoutubeQuotaExceededError(error)
       const message = formatSyncFailure(error)
+      try {
+        await ensureEpisodesForSyncedVideos(strapi, source)
+      } catch (backfillError) {
+        strapi.log.error(
+          `Episode backfill failed for ${documentId}: ${
+            backfillError instanceof Error ? backfillError.message : 'unknown'
+          }`,
+        )
+      }
       await strapi.db.query('api::youtube-source.youtube-source').update({
         where: { id: source.id },
         data: {
@@ -844,6 +1111,14 @@ export default ({ strapi }) => ({
     }
 
     const episodeResult = await this.upsertShowEpisodes(source, upsertPayload)
+    // RSS syncs skip videos already in the catalogue, so a show linked after
+    // the import would stay empty. Fill episodes from every synced video.
+    const backfill = await ensureEpisodesForSyncedVideos(strapi, source)
+    const episodeTotals = {
+      episodesCreated: episodeResult.episodesCreated + backfill.episodesCreated,
+      episodesUpdated: episodeResult.episodesUpdated + backfill.episodesUpdated,
+      episodesNumbered: episodeResult.episodesNumbered + backfill.episodesNumbered,
+    }
 
     let pruned = 0
     if (source.sourceType === 'playlist' && catalogueComplete) {
@@ -864,10 +1139,10 @@ export default ({ strapi }) => ({
     })
 
     strapi.log.info(
-      `YouTube sync complete for source ${documentId}: imported=${imported} updated=${updated} pruned=${pruned} episodesCreated=${episodeResult.episodesCreated} episodesUpdated=${episodeResult.episodesUpdated} episodesNumbered=${episodeResult.episodesNumbered}`,
+      `YouTube sync complete for source ${documentId}: imported=${imported} updated=${updated} pruned=${pruned} episodesCreated=${episodeTotals.episodesCreated} episodesUpdated=${episodeTotals.episodesUpdated} episodesNumbered=${episodeTotals.episodesNumbered}`,
     )
 
-    return { imported, updated, pruned, total, ...episodeResult }
+    return { imported, updated, pruned, total, ...episodeTotals }
   },
 
   async syncShow(showDocumentId: string) {
