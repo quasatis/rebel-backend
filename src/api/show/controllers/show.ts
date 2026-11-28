@@ -61,6 +61,10 @@ export default factories.createCoreController('api::show.show', ({ strapi }) => 
       ) {
         return ctx.badRequest(message)
       }
+      const named = error as { name?: string; status?: number }
+      if (named.name === 'ValidationError' || named.status === 400) {
+        return ctx.badRequest(message)
+      }
       return ctx.internalServerError(message || 'Synchronization failed')
     }
   },
