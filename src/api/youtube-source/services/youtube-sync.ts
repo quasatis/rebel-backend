@@ -117,10 +117,20 @@ async function ownerIdsForRelation(
   const attr = strapi.db.metadata.get(uid)?.attributes?.[attribute]
   const join = attr?.joinTable
   if (!join?.name || !join.joinColumn?.name || !join.inverseJoinColumn?.name) return []
-  const rows = await strapi.db
-    .connection(join.name)
-    .whereIn(join.inverseJoinColumn.name, targetIds)
-    .select(join.joinColumn.name)
+  let rows: Array<Record<string, unknown>> = []
+  try {
+    rows = await strapi.db
+      .connection(join.name)
+      .whereIn(join.inverseJoinColumn.name, targetIds)
+      .select(join.joinColumn.name)
+  } catch (error) {
+    strapi.log.warn(
+      `Relation lookup ${uid}.${attribute} failed: ${
+        error instanceof Error ? error.message : 'unknown'
+      }`,
+    )
+    return []
+  }
   return [
     ...new Set<number>(
       (rows || [])
@@ -218,12 +228,21 @@ async function loadSyncedVideosForSource(
     youtubeVideoId?: string
     mediaSource?: { id?: number; externalId?: string } | number | null
   }> = []
-  const videoIds = await ownerIdsForRelation(
-    strapi,
-    'api::synced-video.synced-video',
-    'youtubeSource',
-    sourceIds,
-  )
+  let videoIds: number[] = []
+  try {
+    videoIds = await ownerIdsForRelation(
+      strapi,
+      'api::synced-video.synced-video',
+      'youtubeSource',
+      sourceIds,
+    )
+  } catch (error) {
+    strapi.log.warn(
+      `Synced-video lookup for ${source.documentId} failed: ${
+        error instanceof Error ? error.message : 'unknown'
+      }`,
+    )
+  }
   if (videoIds.length) {
     videos = await strapi.db.query('api::synced-video.synced-video').findMany({
       where: { id: { $in: videoIds } },
@@ -272,6 +291,74 @@ async function linkedMediaKeysForShow(strapi: any, showDocumentId: string) {
     }
   }
   return linked
+}
+
+function durationOrNull(value: unknown): number | null {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return null
+  return Math.max(0, Math.round(n))
+}
+
+/**
+ * Draft shows have no published row. Creating a published episode then fails
+ * the whole sync with a 500. Write the draft the catalogue reads, and publish
+ * when the show itself is live.
+ */
+async function createShowEpisode(
+  strapi: any,
+  input: {
+    title: string
+    description: string
+    durationSeconds?: number | null
+    slug: string
+    showDocumentId: string
+    mediaSourceId: number
+    publishedAt?: string | null
+  },
+) {
+  const data = {
+    title: clipText(input.title, 100) || 'Episode',
+    description: clipText(input.description, 2000),
+    durationSeconds: durationOrNull(input.durationSeconds),
+    isActive: true,
+    slug: input.slug,
+    show: input.showDocumentId,
+    mediaSource: input.mediaSourceId,
+  }
+  const publishedShow = await strapi.db.query('api::show.show').findOne({
+    where: { documentId: input.showDocumentId, publishedAt: { $notNull: true } },
+    select: ['id'],
+  })
+  let created: { documentId?: string } | null = null
+  if (publishedShow) {
+    try {
+      created = await strapi.documents('api::show-episode.show-episode').create({
+        data,
+        status: 'published',
+      })
+    } catch (error) {
+      strapi.log.warn(
+        `Published episode create failed for show ${input.showDocumentId}; saving a draft: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      )
+    }
+  }
+  if (!created?.documentId) {
+    created = await strapi.documents('api::show-episode.show-episode').create({
+      data,
+      status: 'draft',
+    })
+  }
+  if (input.publishedAt && created?.documentId && publishedShow) {
+    await setDocumentPublishedAt(
+      strapi,
+      'api::show-episode.show-episode',
+      created.documentId,
+      input.publishedAt,
+    )
+  }
+  return created
 }
 
 async function nextEpisodeSlug(strapi: any, title: string, used: Set<string>) {
@@ -327,29 +414,20 @@ async function ensureEpisodesForSyncedVideos(
       const title = clipText(video.title, 100) || 'Episode'
       try {
         const slug = await nextEpisodeSlug(strapi, title, usedSlugs)
-        const created = await strapi.documents('api::show-episode.show-episode').create({
-          data: {
-            title,
-            description: clipText(video.description, 2000),
-            durationSeconds: video.durationSeconds ?? null,
-            isActive: true,
-            slug,
-            show: show.documentId,
-            mediaSource: mediaId,
-          },
-          status: 'published',
+        const created = await createShowEpisode(strapi, {
+          title,
+          description: clipText(video.description, 2000),
+          durationSeconds: video.durationSeconds ?? null,
+          slug,
+          showDocumentId: show.documentId,
+          mediaSourceId: mediaId,
+          publishedAt: video.publishedAt,
         })
-        if (video.publishedAt && created?.documentId) {
-          await setDocumentPublishedAt(
-            strapi,
-            'api::show-episode.show-episode',
-            created.documentId,
-            video.publishedAt,
-          )
+        if (created?.documentId) {
+          linked.add(`id:${mediaId}`)
+          linked.add(`ext:${externalId}`)
+          episodesCreated += 1
         }
-        linked.add(`id:${mediaId}`)
-        linked.add(`ext:${externalId}`)
-        episodesCreated += 1
       } catch (error) {
         strapi.log.error(
           `Could not create episode for ${externalId} on show ${show.documentId}: ${
@@ -359,7 +437,15 @@ async function ensureEpisodesForSyncedVideos(
       }
     }
 
-    episodesNumbered += await assignMissingEpisodeNumbers(strapi, show)
+    try {
+      episodesNumbered += await assignMissingEpisodeNumbers(strapi, show)
+    } catch (error) {
+      strapi.log.error(
+        `Episode numbering failed for show ${show.documentId}: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      )
+    }
   }
 
   if (episodesCreated) {
@@ -635,6 +721,7 @@ export default ({ strapi }) => ({
 
     for (const show of shows) {
       for (const item of items) {
+        try {
         const existingEpisodes = await strapi.documents('api::show-episode.show-episode').findMany({
           filters: {
             show: { documentId: show.documentId },
@@ -646,9 +733,9 @@ export default ({ strapi }) => ({
         const existing = existingEpisodes?.[0]
 
         const episodeData = {
-          title: item.title,
-          description: item.description,
-          durationSeconds: item.durationSeconds ?? null,
+          title: clipText(item.title, 100) || 'Episode',
+          description: clipText(item.description, 2000),
+          durationSeconds: durationOrNull(item.durationSeconds),
           isActive: true,
           mediaSource: item.mediaSourceId,
           show: show.id,
@@ -658,11 +745,11 @@ export default ({ strapi }) => ({
           // YouTube is source of truth for synced episode title/description/duration.
           // Keep isActive as editor-owned (disable in CMS without unlinking the video).
           const patch: Record<string, unknown> = {
-            title: item.title,
-            description: item.description,
+            title: episodeData.title,
+            description: episodeData.description,
           }
-          if (item.durationSeconds != null) {
-            patch.durationSeconds = item.durationSeconds
+          if (episodeData.durationSeconds != null) {
+            patch.durationSeconds = episodeData.durationSeconds
           }
           if (existing.documentId) {
             await updateEpisodeVersions(strapi, existing.documentId, patch)
@@ -690,29 +777,35 @@ export default ({ strapi }) => ({
           episodesUpdated += 1
         } else {
           const slug = await uniqueEpisodeSlug(strapi, slugify(item.title))
-          const created = await strapi.documents('api::show-episode.show-episode').create({
-            data: {
-              ...episodeData,
-              slug,
-              show: show.documentId,
-              mediaSource: item.mediaSourceId,
-            },
-            status: 'published',
+          const created = await createShowEpisode(strapi, {
+            title: item.title,
+            description: item.description,
+            durationSeconds: item.durationSeconds ?? null,
+            slug,
+            showDocumentId: show.documentId,
+            mediaSourceId: item.mediaSourceId,
+            publishedAt: item.publishedAt,
           })
-          // create({ status: 'published' }) stamps publishedAt to "now"; overwrite with YouTube date.
-          if (item.publishedAt && created?.documentId) {
-            await setDocumentPublishedAt(
-              strapi,
-              'api::show-episode.show-episode',
-              created.documentId,
-              item.publishedAt,
-            )
-          }
-          episodesCreated += 1
+          if (created?.documentId) episodesCreated += 1
+        }
+        } catch (error) {
+          strapi.log.error(
+            `Episode sync failed for ${item.youtubeVideoId} on show ${show.documentId}: ${
+              error instanceof Error ? error.message : 'unknown'
+            }`,
+          )
         }
       }
 
-      episodesNumbered += await assignMissingEpisodeNumbers(strapi, show)
+      try {
+        episodesNumbered += await assignMissingEpisodeNumbers(strapi, show)
+      } catch (error) {
+        strapi.log.error(
+          `Episode numbering failed for show ${show.documentId}: ${
+            error instanceof Error ? error.message : 'unknown'
+          }`,
+        )
+      }
     }
 
     return { episodesCreated, episodesUpdated, episodesNumbered }
@@ -1111,7 +1204,16 @@ export default ({ strapi }) => ({
     const episodeResult = await this.upsertShowEpisodes(source, upsertPayload)
     // RSS syncs skip videos already in the catalogue, so a show linked after
     // the import would stay empty. Fill episodes from every synced video.
-    const backfill = await ensureEpisodesForSyncedVideos(strapi, source)
+    let backfill = { episodesCreated: 0, episodesUpdated: 0, episodesNumbered: 0 }
+    try {
+      backfill = await ensureEpisodesForSyncedVideos(strapi, source)
+    } catch (error) {
+      strapi.log.error(
+        `Episode backfill failed for ${documentId}: ${
+          error instanceof Error ? error.message : 'unknown'
+        }`,
+      )
+    }
     const episodeTotals = {
       episodesCreated: episodeResult.episodesCreated + backfill.episodesCreated,
       episodesUpdated: episodeResult.episodesUpdated + backfill.episodesUpdated,
