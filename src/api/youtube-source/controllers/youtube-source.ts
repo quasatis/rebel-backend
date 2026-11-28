@@ -1,4 +1,8 @@
 ﻿import { factories } from '@strapi/strapi'
+import {
+  YOUTUBE_QUOTA_USER_MESSAGE,
+  isYoutubeQuotaExceededError,
+} from '../../../utils/youtube-quota'
 
 export default factories.createCoreController('api::youtube-source.youtube-source', ({ strapi }) => ({
   async sync(ctx) {
@@ -7,11 +11,16 @@ export default factories.createCoreController('api::youtube-source.youtube-sourc
       return ctx.badRequest('documentId is required')
     }
     try {
-      const result = await strapi.service('api::youtube-source.youtube-sync').syncSource(documentId)
+      const result = await strapi.service('api::youtube-source.youtube-sync').syncSource(documentId, {
+        reason: 'manual',
+      })
       ctx.body = { data: result }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown'
       strapi.log.error(`Manual YouTube sync failed: ${message}`)
+      if (isYoutubeQuotaExceededError(error)) {
+        return ctx.tooManyRequests(YOUTUBE_QUOTA_USER_MESSAGE)
+      }
       if (
         /rejected|empty|not found|missing required|Invalid Value|YouTube API error 400/i.test(
           message,
@@ -25,7 +34,9 @@ export default factories.createCoreController('api::youtube-source.youtube-sourc
 
   async syncAll(ctx) {
     try {
-      const results = await strapi.service('api::youtube-source.youtube-sync').syncAllEnabledSources()
+      const results = await strapi.service('api::youtube-source.youtube-sync').syncAllEnabledSources({
+        reason: 'manual',
+      })
       const failed = results.filter((row: { error?: boolean }) => row.error).length
       const synced = results.length - failed
       ctx.body = {

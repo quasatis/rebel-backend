@@ -6,14 +6,89 @@ import {
   normalizeYoutubeVideoId,
 } from '../../../utils/youtube-ids'
 import { setDocumentPublishedAt } from '../../../utils/publish-date'
-import { isExcludedYoutubeVideoTitle } from './youtube'
+import {
+  YOUTUBE_QUOTA_USER_MESSAGE,
+  isYoutubeQuotaCircuitOpen,
+  isYoutubeQuotaExceededError,
+} from '../../../utils/youtube-quota'
+import { isExcludedYoutubeVideoTitle, type YoutubeListItem } from './youtube'
+
+type SyncReason = 'schedule' | 'manual'
 
 function formatSyncFailure(error: unknown): string {
+  if (isYoutubeQuotaExceededError(error)) return YOUTUBE_QUOTA_USER_MESSAGE
   const raw = error instanceof Error ? error.message : 'sync failed'
   if (/fetch failed/i.test(raw) || /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|network/i.test(raw)) {
     return 'Could not reach YouTube API (network/DNS). Check YOUTUBE_API_KEY and outbound access from Strapi.'
   }
   return raw
+}
+
+function skipScheduledSyncReason(source: {
+  syncFrequency?: string | null
+  lastSyncedAt?: string | Date | null
+  lastSyncStatus?: string | null
+}): string | null {
+  const freq = String(source.syncFrequency || 'hourly')
+  if (freq === 'manual') return 'frequency-manual'
+  const last = source.lastSyncedAt ? new Date(source.lastSyncedAt).getTime() : 0
+  const ok = String(source.lastSyncStatus || '').startsWith('ok')
+  if (!last || !ok) return null
+  const age = Date.now() - last
+  if (freq === 'daily' && age < 20 * 60 * 60 * 1000) return 'frequency-daily'
+  if (freq === 'weekly' && age < 6.5 * 24 * 60 * 60 * 1000) return 'frequency-weekly'
+  return null
+}
+
+function isQuotaPausedStatus(status: string): boolean {
+  if (status === 'paused:quota' || status.startsWith('paused:quota')) return true
+  return status.toLowerCase().startsWith('error') && /quota|exceeded your/i.test(status)
+}
+
+function wantsFullCatalogue(
+  source: { videosImported?: number | null; lastSyncStatus?: string | null },
+  reason: SyncReason,
+): boolean {
+  if (reason === 'manual') return true
+  if (!Number(source.videosImported || 0)) return true
+  const status = String(source.lastSyncStatus || '')
+  // A quota pause stays on the public feed until the daily circuit closes
+  // (midnight Pacific). `ok` / `ok:rss` already skip a full catalogue.
+  if (isQuotaPausedStatus(status)) return !isYoutubeQuotaCircuitOpen()
+  return !status.startsWith('ok')
+}
+
+async function enrichMissingVideoDetails(
+  strapi: any,
+  youtube: { enrichVideoDetails: (items: YoutubeListItem[]) => Promise<YoutubeListItem[]> },
+  items: YoutubeListItem[],
+): Promise<YoutubeListItem[]> {
+  if (!items.length) return items
+  const ids = items.map((item) => item.id)
+  const existing = await strapi.db.query('api::synced-video.synced-video').findMany({
+    where: { youtubeVideoId: { $in: ids } },
+    select: ['youtubeVideoId', 'durationSeconds'],
+    limit: ids.length,
+  })
+  const known = new Map(
+    (existing || []).map((row: { youtubeVideoId?: string; durationSeconds?: number | null }) => [
+      String(row.youtubeVideoId || ''),
+      row,
+    ]),
+  )
+  const need = items.filter((item) => {
+    const row = known.get(item.id)
+    return !row || row.durationSeconds == null
+  })
+  if (!need.length) return items
+  try {
+    const enriched = await youtube.enrichVideoDetails(need)
+    const byId = new Map(enriched.map((item) => [item.id, item]))
+    return items.map((item) => byId.get(item.id) || item)
+  } catch (error) {
+    if (isYoutubeQuotaExceededError(error)) return items
+    throw error
+  }
 }
 
 function slugify(input: string): string {
@@ -387,7 +462,8 @@ export default ({ strapi }) => ({
     return { episodesCreated, episodesUpdated, episodesNumbered }
   },
 
-  async syncSource(documentId: string) {
+  async syncSource(documentId: string, options?: { reason?: SyncReason }) {
+    const reason: SyncReason = options?.reason === 'schedule' ? 'schedule' : 'manual'
     const source = await strapi.documents('api::youtube-source.youtube-source').findOne({
       documentId,
     })
@@ -396,6 +472,12 @@ export default ({ strapi }) => ({
     }
     if (!source.active || !source.syncEnabled) {
       return { imported: 0, updated: 0, skipped: true }
+    }
+    if (reason === 'schedule') {
+      const skip = skipScheduledSyncReason(source)
+      if (skip) {
+        return { imported: 0, updated: 0, skipped: true, reason: skip }
+      }
     }
 
     const youtube = strapi.service('api::youtube-source.youtube')
@@ -487,7 +569,13 @@ export default ({ strapi }) => ({
     let attributionChannelId = source.channelId || null
     let attributionChannelUrl = source.channelUrl || null
     let attributionChannelTitle: string | null = source.channelTitle || null
-    if (source.sourceType === 'playlist' && source.playlistId) {
+    const fullCatalogue = wantsFullCatalogue(source, reason)
+    if (
+      source.sourceType === 'playlist' &&
+      source.playlistId &&
+      fullCatalogue &&
+      !isYoutubeQuotaCircuitOpen()
+    ) {
       try {
         const meta = await youtube.fetchPlaylistMeta(source.playlistId)
         if (meta?.channelId) {
@@ -504,13 +592,56 @@ export default ({ strapi }) => ({
       }
     }
 
-    let items = []
-    try {
+    const missingIdentifiersError = () => {
+      const type = String(source.sourceType || 'unknown')
+      const hint =
+        type === 'video'
+          ? 'Set a Video ID, or change Source type to Username/Channel/Playlist.'
+          : type === 'playlist'
+            ? 'Set a Playlist ID.'
+            : type === 'channel'
+              ? 'Set a Channel ID (UC…).'
+              : type === 'username'
+                ? 'Set a Username / @handle.'
+                : 'Check Source type and identifiers.'
+      return new Error(`Source is missing required identifiers for type “${type}”. ${hint}`)
+    }
+
+    const loadFromRss = async (): Promise<YoutubeListItem[]> => {
       if (source.sourceType === 'playlist' && source.playlistId) {
-        items = await youtube.fetchPlaylistVideos(source.playlistId)
-      } else if (source.sourceType === 'channel' && source.channelId) {
-        items = await youtube.fetchChannelUploads(source.channelId)
-      } else if (source.sourceType === 'username' && source.username) {
+        return youtube.fetchFeedVideos({ playlistId: source.playlistId })
+      }
+      if (source.sourceType === 'channel' && source.channelId) {
+        return youtube.fetchFeedVideos({ channelId: source.channelId })
+      }
+      if (source.sourceType === 'username') {
+        let channelId = source.channelId
+        if (!channelId && source.username && !isYoutubeQuotaCircuitOpen()) {
+          channelId = await youtube.resolveChannelIdFromUsername(source.username)
+          if (channelId && channelId !== source.channelId) {
+            await strapi.db.query('api::youtube-source.youtube-source').update({
+              where: { id: source.id },
+              data: { channelId },
+            })
+            source.channelId = channelId
+          }
+        }
+        if (!channelId) {
+          throw new Error('Username source has no channel ID for RSS fallback. Run a full sync after quota resets.')
+        }
+        return youtube.fetchFeedVideos({ channelId })
+      }
+      throw missingIdentifiersError()
+    }
+
+    const loadFromApi = async (): Promise<YoutubeListItem[]> => {
+      if (source.sourceType === 'playlist' && source.playlistId) {
+        return youtube.fetchPlaylistVideos(source.playlistId, { enrich: false })
+      }
+      if (source.sourceType === 'channel' && source.channelId) {
+        return youtube.fetchChannelUploads(source.channelId, { enrich: false })
+      }
+      if (source.sourceType === 'username' && source.username) {
         const channelId = await youtube.resolveChannelIdFromUsername(source.username)
         if (channelId && channelId !== source.channelId) {
           await strapi.db.query('api::youtube-source.youtube-source').update({
@@ -519,30 +650,45 @@ export default ({ strapi }) => ({
           })
           source.channelId = channelId
         }
-        items = await youtube.fetchChannelUploads(channelId)
-      } else if (source.sourceType === 'video' && source.videoId) {
-        const one = await youtube.fetchVideo(source.videoId)
-        items = one ? [one] : []
-      } else {
-        const type = String(source.sourceType || 'unknown')
-        const hint =
-          type === 'video'
-            ? 'Set a Video ID, or change Source type to Username/Channel/Playlist.'
-            : type === 'playlist'
-              ? 'Set a Playlist ID.'
-              : type === 'channel'
-                ? 'Set a Channel ID (UC…).'
-                : type === 'username'
-                  ? 'Set a Username / @handle.'
-                  : 'Check Source type and identifiers.'
-        throw new Error(`Source is missing required identifiers for type “${type}”. ${hint}`)
+        return youtube.fetchChannelUploads(channelId, { enrich: false })
       }
+      if (source.sourceType === 'video' && source.videoId) {
+        const one = await youtube.fetchVideo(source.videoId)
+        return one ? [one] : []
+      }
+      throw missingIdentifiersError()
+    }
+
+    let items: YoutubeListItem[] = []
+    let catalogueComplete = false
+    try {
+      if (source.sourceType === 'video') {
+        items = await loadFromApi()
+        catalogueComplete = true
+      } else if (fullCatalogue) {
+        try {
+          items = await loadFromApi()
+          catalogueComplete = true
+        } catch (error) {
+          if (!isYoutubeQuotaExceededError(error)) throw error
+          strapi.log.warn(
+            `YouTube quota exceeded for ${documentId}; falling back to public RSS feed`,
+          )
+          items = await loadFromRss()
+        }
+      } else {
+        items = await loadFromRss()
+      }
+      items = await enrichMissingVideoDetails(strapi, youtube, items)
     } catch (error) {
+      const quota = isYoutubeQuotaExceededError(error)
       const message = formatSyncFailure(error)
       await strapi.db.query('api::youtube-source.youtube-source').update({
         where: { id: source.id },
         data: {
-          lastSyncStatus: `error: ${message}`,
+          // Quota is not a broken source. RSS success is recorded as ok:rss above;
+          // a quota failure with no feed still must not stay an `error:` row.
+          lastSyncStatus: quota ? 'paused:quota' : `error: ${message}`,
           lastSyncedAt: new Date().toISOString(),
         },
       })
@@ -600,6 +746,30 @@ export default ({ strapi }) => ({
         where: { youtubeVideoId: normalized.youtubeVideoId },
       })
 
+      if (!catalogueComplete && existing) {
+        if (
+          normalized.durationSeconds != null &&
+          existing.durationSeconds == null
+        ) {
+          await strapi.db.query('api::synced-video.synced-video').update({
+            where: { id: existing.id },
+            data: { durationSeconds: normalized.durationSeconds },
+          })
+          const mediaId =
+            typeof existing.mediaSource === 'number'
+              ? existing.mediaSource
+              : existing.mediaSource?.id
+          if (typeof mediaId === 'number') {
+            await strapi.db.query('api::media-source.media-source').update({
+              where: { id: mediaId },
+              data: { durationSeconds: normalized.durationSeconds },
+            })
+          }
+          updated += 1
+        }
+        continue
+      }
+
       let mediaSourceId = existing?.mediaSource
       const mediaPayload = normalized.mediaSource
 
@@ -629,20 +799,22 @@ export default ({ strapi }) => ({
         }
       }
 
-      const videoData = {
+      const videoData: Record<string, unknown> = {
         youtubeVideoId: normalized.youtubeVideoId,
         title: normalized.title,
         description: normalized.description,
         thumbnailUrl: normalized.thumbnailUrl,
         publishedAt: normalized.publishedAt,
-        playlistPosition:
-          typeof normalized.playlistPosition === 'number' ? normalized.playlistPosition : null,
         channelTitle: normalized.channelTitle,
         durationSeconds: normalized.durationSeconds,
         externalUrl: normalized.externalUrl,
         syncedAt: new Date().toISOString(),
         mediaSource: mediaSourceId,
         youtubeSource: source.id,
+      }
+      if (catalogueComplete) {
+        videoData.playlistPosition =
+          typeof normalized.playlistPosition === 'number' ? normalized.playlistPosition : null
       }
 
       if (existing) {
@@ -674,7 +846,7 @@ export default ({ strapi }) => ({
     const episodeResult = await this.upsertShowEpisodes(source, upsertPayload)
 
     let pruned = 0
-    if (source.sourceType === 'playlist') {
+    if (source.sourceType === 'playlist' && catalogueComplete) {
       pruned = await pruneSourceToSyncedItems(strapi, source, upsertPayload)
     }
 
@@ -686,7 +858,7 @@ export default ({ strapi }) => ({
       where: { id: source.id },
       data: {
         lastSyncedAt: new Date().toISOString(),
-        lastSyncStatus: 'ok',
+        lastSyncStatus: catalogueComplete ? 'ok' : 'ok:rss',
         videosImported: total,
       },
     })
@@ -711,7 +883,7 @@ export default ({ strapi }) => ({
     if (!source?.documentId) {
       throw new Error('Show has no YouTube source configured')
     }
-    return this.syncSource(source.documentId)
+    return this.syncSource(source.documentId, { reason: 'manual' })
   },
 
   /** Repair episodeNumber (+ sync-stamped publishedAt) for every show without hitting YouTube. */
@@ -720,7 +892,8 @@ export default ({ strapi }) => ({
     return { updated }
   },
 
-  async syncAllEnabledSources() {
+  async syncAllEnabledSources(options?: { reason?: SyncReason }) {
+    const reason: SyncReason = options?.reason === 'manual' ? 'manual' : 'schedule'
     const sources = await strapi.documents('api::youtube-source.youtube-source').findMany({
       filters: { active: true, syncEnabled: true },
       limit: 100,
@@ -730,7 +903,7 @@ export default ({ strapi }) => ({
       try {
         results.push({
           documentId: source.documentId,
-          ...(await this.syncSource(source.documentId)),
+          ...(await this.syncSource(source.documentId, { reason })),
         })
       } catch (error) {
         strapi.log.error(

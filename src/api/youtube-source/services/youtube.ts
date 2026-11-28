@@ -1,6 +1,6 @@
 /**
  * YouTube Data API client. Credentials stay server-side only.
- * Includes light quota batching + exponential backoff on 403/429.
+ * Quota-aware: never retry daily quota errors; backoff only on rate limits / 5xx.
  */
 
 import {
@@ -9,6 +9,16 @@ import {
   normalizeYoutubeUsername,
   normalizeYoutubeVideoId,
 } from '../../../utils/youtube-ids'
+import {
+  YoutubeQuotaExceededError,
+  clearYoutubeQuotaCircuit,
+  isYoutubeQuotaCircuitOpen,
+  isYoutubeQuotaReason,
+  isYoutubeRetryableStatus,
+  markYoutubeQuotaExceeded,
+  youtubeErrorReason,
+} from '../../../utils/youtube-quota'
+import { fetchYoutubeFeedVideos } from '../../../utils/youtube-rss'
 
 export type YoutubeLiveBroadcastContent = 'none' | 'upcoming' | 'live'
 
@@ -97,6 +107,10 @@ function sleep(ms: number) {
 }
 
 async function youtubeGet<T>(path: string, params: Record<string, string>): Promise<T> {
+  if (isYoutubeQuotaCircuitOpen()) {
+    throw new YoutubeQuotaExceededError()
+  }
+
   const url = new URL(`https://www.googleapis.com/youtube/v3/${path}`)
   url.searchParams.set('key', getApiKey())
   for (const [k, v] of Object.entries(params)) {
@@ -109,18 +123,26 @@ async function youtubeGet<T>(path: string, params: Record<string, string>): Prom
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const response = await fetch(url)
     if (response.ok) {
+      clearYoutubeQuotaCircuit()
       return (await response.json()) as T
     }
 
-    const retryable = response.status === 403 || response.status === 429 || response.status >= 500
     const body = await response.text().catch(() => '')
-    lastError = new Error(`YouTube API error ${response.status}${body ? `: ${body.slice(0, 200)}` : ''}`)
+    const reason = youtubeErrorReason(body)
+    if (isYoutubeQuotaReason(reason)) {
+      markYoutubeQuotaExceeded()
+      throw new YoutubeQuotaExceededError()
+    }
 
+    lastError = new Error(
+      `YouTube API error ${response.status}${body ? `: ${body.slice(0, 200)}` : ''}`,
+    )
+
+    const retryable = isYoutubeRetryableStatus(response.status, reason)
     if (!retryable || attempt === maxAttempts) {
       throw lastError
     }
 
-    // Exponential backoff with jitter: ~500ms, 1s, 2s
     const delay = Math.min(8000, 400 * 2 ** (attempt - 1) + Math.floor(Math.random() * 200))
     await sleep(delay)
   }
@@ -180,7 +202,21 @@ async function enrichVideoDetails(items: YoutubeListItem[]): Promise<YoutubeList
 }
 
 export default () => ({
-  async fetchPlaylistVideos(playlistId: string): Promise<YoutubeListItem[]> {
+  async enrichVideoDetails(items: YoutubeListItem[]): Promise<YoutubeListItem[]> {
+    return enrichVideoDetails(items)
+  },
+
+  async fetchFeedVideos(params: {
+    playlistId?: string | null
+    channelId?: string | null
+  }): Promise<YoutubeListItem[]> {
+    return fetchYoutubeFeedVideos(params)
+  },
+
+  async fetchPlaylistVideos(
+    playlistId: string,
+    options?: { enrich?: boolean },
+  ): Promise<YoutubeListItem[]> {
     const id = normalizeYoutubePlaylistId(playlistId)
     if (!id) {
       throw new Error('Playlist ID is empty. Paste a playlist ID (PL…) or playlist URL.')
@@ -246,6 +282,7 @@ export default () => ({
       pageToken = page.nextPageToken || ''
       if (pageToken) await sleep(150)
     } while (pageToken)
+    if (options?.enrich === false) return items
     return enrichVideoDetails(items)
   },
 
@@ -335,7 +372,10 @@ export default () => ({
     return order
   },
 
-  async fetchChannelUploads(channelId: string): Promise<YoutubeListItem[]> {
+  async fetchChannelUploads(
+    channelId: string,
+    options?: { enrich?: boolean },
+  ): Promise<YoutubeListItem[]> {
     const id = normalizeYoutubeChannelId(channelId)
     if (!id) {
       throw new Error('Channel ID is empty. Paste a channel ID (UC…) or /channel/ URL.')
@@ -356,7 +396,7 @@ export default () => ({
     })
     const uploads = channel.items?.[0]?.contentDetails?.relatedPlaylists?.uploads
     if (!uploads) return []
-    return this.fetchPlaylistVideos(uploads)
+    return this.fetchPlaylistVideos(uploads, options)
   },
 
   /**
@@ -396,9 +436,12 @@ export default () => ({
   /**
    * Resolve a YouTube @handle or legacy username to a channel ID, then fetch uploads.
    */
-  async fetchUsernameUploads(username: string): Promise<YoutubeListItem[]> {
+  async fetchUsernameUploads(
+    username: string,
+    options?: { enrich?: boolean },
+  ): Promise<YoutubeListItem[]> {
     const channelId = await this.resolveChannelIdFromUsername(username)
-    return this.fetchChannelUploads(channelId)
+    return this.fetchChannelUploads(channelId, options)
   },
 
   async fetchVideo(videoId: string): Promise<YoutubeListItem | null> {

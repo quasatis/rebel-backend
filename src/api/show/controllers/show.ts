@@ -1,4 +1,8 @@
 ﻿import { factories } from '@strapi/strapi'
+import {
+  YOUTUBE_QUOTA_USER_MESSAGE,
+  isYoutubeQuotaExceededError,
+} from '../../../utils/youtube-quota'
 
 export default factories.createCoreController('api::show.show', ({ strapi }) => ({
   async episodes(ctx) {
@@ -47,6 +51,9 @@ export default factories.createCoreController('api::show.show', ({ strapi }) => 
     } catch (error) {
       const message = error instanceof Error ? error.message : 'unknown'
       strapi.log.error(`Manual Show sync failed: ${message}`)
+      if (isYoutubeQuotaExceededError(error)) {
+        return ctx.tooManyRequests(YOUTUBE_QUOTA_USER_MESSAGE)
+      }
       if (
         message.includes('no YouTube source') ||
         message.includes('not found') ||
