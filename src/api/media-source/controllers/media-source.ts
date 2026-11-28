@@ -2,6 +2,7 @@
 import { enrichYoutubeMediaSourceData, refreshMediaSourceLiveStatus } from '../../../utils/enrich-youtube-media-source'
 import { enrichVimeoMediaSourceData } from '../../../utils/enrich-vimeo-media-source'
 import { getCachedLiveStatus, setCachedLiveStatus } from '../../../utils/live-status-cache'
+import { isYoutubeQuotaExceededError } from '../../../utils/youtube-quota'
 import { vimeoProviderExternalKey } from '../../../utils/vimeo-ids'
 
 /**
@@ -130,7 +131,11 @@ export default factories.createCoreController(
           refreshedAt: new Date().toISOString(),
           warning: message,
         }
-        setCachedLiveStatus(externalId, fallback)
+        setCachedLiveStatus(
+          externalId,
+          fallback,
+          isYoutubeQuotaExceededError(error) ? 15 * 60 * 1000 : undefined,
+        )
         ctx.body = { data: fallback }
         strapi.log.warn(`media-source.liveStatus: ${message}`)
       }

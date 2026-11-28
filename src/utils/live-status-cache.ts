@@ -25,8 +25,13 @@ export function getCachedLiveStatus(externalId: string): YoutubeLiveStatusPayloa
   return entry.payload
 }
 
-export function setCachedLiveStatus(externalId: string, payload: YoutubeLiveStatusPayload) {
+export function setCachedLiveStatus(
+  externalId: string,
+  payload: YoutubeLiveStatusPayload,
+  ttlMs = TTL_MS,
+) {
   const key = String(externalId || '').trim()
   if (!key) return
-  cache.set(key, { expiresAt: Date.now() + TTL_MS, payload })
+  const ttl = Number.isFinite(ttlMs) && ttlMs > 0 ? ttlMs : TTL_MS
+  cache.set(key, { expiresAt: Date.now() + ttl, payload })
 }
